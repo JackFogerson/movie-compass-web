@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from pwdlib import PasswordHash
+
+COOKIE_NAME = "movie_compass_session"
+_PASSWORD_HASH = PasswordHash.recommended()
+
+
+@dataclass(frozen=True)
+class SessionIdentity:
+    account_id: int
+    email: str
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().casefold()
+
+
+def hash_password(value: str) -> str:
+    return _PASSWORD_HASH.hash(value)
+
+
+def verify_password(value: str, encoded: str) -> bool:
+    return _PASSWORD_HASH.verify(value, encoded)
+
+
+def create_session_token(secret: str, account_id: int, email: str) -> str:
+    serializer = URLSafeTimedSerializer(secret, salt="movie-compass-session")
+    return serializer.dumps({"account_id": account_id, "email": email})
+
+
+def read_session_token(secret: str, token: str, max_age_seconds: int) -> SessionIdentity | None:
+    serializer = URLSafeTimedSerializer(secret, salt="movie-compass-session")
+    try:
+        payload = serializer.loads(token, max_age=max_age_seconds)
+        return SessionIdentity(int(payload["account_id"]), str(payload["email"]))
+    except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
+        return None

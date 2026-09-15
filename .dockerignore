@@ -1,0 +1,10 @@
+.git
+.env
+.venv
+data/raw
+data/processed
+data/*.sqlite3
+.pytest_cache
+.ruff_cache
+tests
+docs

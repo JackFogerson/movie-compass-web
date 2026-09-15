@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: movie-compass-web
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: TMDB_API_KEY
+        sync: false
+      - key: WEB_SESSION_SECRET
+        generateValue: true
+      - key: WEB_COOKIE_SECURE
+        value: "true"
+      - key: WEB_AUTH_REQUIRED
+        value: "true"

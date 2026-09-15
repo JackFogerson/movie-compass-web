@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Movie Compass</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260910-2" />
+  </head>
+  <body data-user="">
+    <header class="site-header">
+      <div class="brand"><span class="brand-mark">MC</span><span>Movie Compass</span></div>
+      <p>Personal predictions from the movies you already know and love.</p>
+      <div id="account-menu" class="account-menu" hidden><span id="account-name"></span><button id="sign-out" class="secondary-button" type="button">Sign out</button></div>
+    </header>
+
+    <dialog id="auth-dialog" class="auth-dialog">
+      <div class="auth-brand"><span class="brand-mark">MC</span><div><strong>Movie Compass</strong><small>Your profiles, together in one private account.</small></div></div>
+      <div class="auth-grid">
+        <form id="login-form" class="auth-form">
+          <div><span class="context-label">WELCOME BACK</span><h2>Sign in</h2></div>
+          <label>Email<input id="login-email" type="email" autocomplete="email" required /></label>
+          <label>Password<input id="login-password" type="password" autocomplete="current-password" minlength="10" required /></label>
+          <button type="submit">Sign in</button>
+        </form>
+        <form id="register-form" class="auth-form">
+          <div><span class="context-label">NEW HOUSEHOLD</span><h2>Create an account</h2></div>
+          <label>Your name<input id="register-name" autocomplete="name" maxlength="100" required /></label>
+          <label>Email<input id="register-email" type="email" autocomplete="email" required /></label>
+          <label>Password<input id="register-password" type="password" autocomplete="new-password" minlength="10" required /></label>
+          <button type="submit">Create account</button>
+        </form>
+      </div>
+      <p id="auth-status" class="status-message" aria-live="polite"></p>
+      <p class="auth-privacy">Each account may contain multiple taste profiles. Profiles are private to the account until a future sharing feature is explicitly enabled.</p>
+    </dialog>
+
+    <main>
+      <section class="hero">
+        <div class="eyebrow">PERSONAL MOVIE ENGINE</div>
+        <h1>What should we watch?</h1>
+        <p class="lede">Explore one person's taste or find the overlap for movie night. Every result includes an expected rating and the evidence behind it.</p>
+      </section>
+
+      <nav class="view-tabs" aria-label="Recommendation mode">
+        <button class="view-tab active" data-view="personal" type="button"><span>For me</span><small>One taste profile</small></button>
+        <button class="view-tab" data-view="group" type="button"><span>Movie night</span><small>Two to four people</small></button>
+        <button class="view-tab" data-view="profiles" type="button"><span>Profiles</span><small>History, stats &amp; settings</small></button>
+      </nav>
+
+      <section id="personal-view" class="app-view">
+        <section class="profile-bar" aria-label="Active profile">
+          <div class="profile-picker">
+            <label for="profile-select">Active taste profile</label>
+            <select id="profile-select" aria-label="Active taste profile"></select>
+          </div>
+          <div id="profile-summary" class="profile-summary">Loading saved profiles…</div>
+          <details class="profile-drawer profile-editor" open>
+            <summary>Manage profile</summary>
+            <div class="profile-editor-form">
+              <label>Display name<input id="profile-display-name" maxlength="100" /></label>
+              <label>Profile ID<input id="profile-id" readonly /></label>
+              <button id="save-profile" type="button">Save name</button>
+              <button id="rebuild-profile" class="secondary-button" type="button">Rebuild ranking</button>
+              <button id="show-profile-ratings" class="secondary-button" type="button">Rating history</button>
+              <button id="show-profile-accuracy" class="secondary-button" type="button">Model accuracy</button>
+              <button id="export-profile" class="secondary-button" type="button">Download profile</button>
+            </div>
+            <div class="stats-filter">
+              <div><strong>Profile statistics</strong><small>Defaults to all history. Years are based on the diary date, not the movie's release year.</small></div>
+              <label>Diary year<select id="stats-year"><option value="">All years</option></select></label>
+              <button id="show-profile-stats" class="secondary-button" type="button">View stats</button>
+            </div>
+            <div id="profile-stats" class="profile-stats" hidden></div>
+            <div id="profile-accuracy" class="profile-accuracy" hidden></div>
+            <div class="profile-update-form">
+              <div><strong>Update movie history</strong><small>Only films with a rating are imported. Watchlist-only and like-only entries are ignored.</small></div>
+              <label>New Letterboxd ZIP<input id="update-profile-archive" type="file" accept=".zip,application/zip" /></label>
+              <button id="update-profile" type="button">Update profile</button>
+            </div>
+            <div id="update-profile-status" class="status-message" aria-live="polite"></div>
+            <section class="manual-rating-editor">
+              <div class="manual-rating-heading"><strong>Add or edit one movie</strong><small>A rating is required. A written review is optional and will be considered only when review text improves this profile’s held-out accuracy.</small></div>
+              <div class="manual-rating-search">
+                <label>Movie title<input id="manual-movie-query" type="search" minlength="2" placeholder="Search TMDB…" /></label>
+                <label>Release year · optional<input id="manual-movie-year" type="number" min="1870" max="2200" placeholder="Any year" /></label>
+                <button id="find-manual-movie" class="secondary-button" type="button">Find movie</button>
+              </div>
+              <div id="manual-movie-results" class="manual-movie-results" hidden></div>
+              <div id="manual-rating-fields" class="manual-rating-fields" hidden>
+                <div id="selected-manual-movie" class="selected-manual-movie"></div>
+                <label>Your rating<select id="manual-movie-rating"><option value="5">5.0 ★</option><option value="4.5">4.5 ★</option><option value="4">4.0 ★</option><option value="3.5" selected>3.5 ★</option><option value="3">3.0 ★</option><option value="2.5">2.5 ★</option><option value="2">2.0 ★</option><option value="1.5">1.5 ★</option><option value="1">1.0 ★</option><option value="0.5">0.5 ★</option></select></label>
+                <label class="manual-review-label">Review · optional<textarea id="manual-movie-review" maxlength="20000" rows="4" placeholder="What worked—or didn’t—for you?"></textarea></label>
+                <button id="save-manual-rating" type="button">Save rating</button>
+              </div>
+              <div id="manual-rating-status" class="status-message" aria-live="polite"></div>
+            </section>
+            <div class="danger-zone">
+              <div><strong>Delete this profile</strong><small>Removes its imported history, ratings, reviews, and generated rankings.</small></div>
+              <label>Type its display name or profile ID<input id="delete-profile-confirmation" autocomplete="off" /></label>
+              <button id="delete-profile" class="danger-button" type="button">Delete permanently</button>
+            </div>
+            <div id="profile-editor-status" class="status-message" aria-live="polite"></div>
+          </details>
+          <details class="import-drawer">
+            <summary>Add profile</summary>
+            <div class="import-form">
+              <label>New profile ID<input id="profile-name" placeholder="letters, numbers, - or _" pattern="[A-Za-z0-9_-]+" /></label>
+              <label>Letterboxd ZIP<input id="profile-archive" type="file" accept=".zip,application/zip" /></label>
+              <button id="import-profile" type="button">Create profile</button>
+            </div>
+            <div id="import-status" class="status-message" aria-live="polite"></div>
+          </details>
+        </section>
+        <section id="empty-profile-state" class="empty-profile-state" hidden>
+          <strong>Start with a taste profile</strong>
+          <p>This copy of Movie Compass has no personal data. Open <b>Add profile</b> and import a Letterboxd export or a Movie Compass profile backup.</p>
+        </section>
+
+        <section class="controls" aria-label="Recommendation filters">
+          <label>From year<input id="year-min" type="number" min="1870" max="2200" placeholder="Any year" /></label>
+          <label>Through year<input id="year-max" type="number" min="1870" max="2200" placeholder="Any year" /></label>
+          <label>Genre<select id="genre"><option value="">All genres</option><option>Action</option><option>Adventure</option><option>Animation</option><option>Comedy</option><option>Crime</option><option>Documentary</option><option>Drama</option><option>Family</option><option>Fantasy</option><option>History</option><option>Horror</option><option>Music</option><option>Mystery</option><option>Romance</option><option>Science Fiction</option><option>Thriller</option><option>War</option><option>Western</option></select></label>
+          <label>Runtime<select id="runtime"><option value="">Any runtime</option><option value="1-59">Under 60 min</option><option value="60-89">60–89 min</option><option value="90-119">90–119 min</option><option value="120-149">120–149 min</option><option value="150-179">150–179 min</option><option value="180-600">180+ min</option></select></label>
+          <label>Audience reach<select id="popularity"><option value="all">Any audience reach</option><option value="blockbuster">Blockbuster</option><option value="popular">Popular</option><option value="cult_classic">Cult classic</option><option value="under_the_radar">Under the radar</option><option value="unknown">Unknown / emerging</option></select></label>
+          <label>US content rating<select id="certification"><option value="all">Any content rating</option><option value="g">G</option><option value="pg">PG</option><option value="pg-13">PG-13</option><option value="r">R</option><option value="nc-17">NC-17</option><option value="unrated">Unrated / NR</option><option value="other">Other / TV rating</option><option value="unknown">Unknown / not rated</option></select></label>
+          <label>Watch in USA<select id="availability"><option value="all">Don't filter availability</option><option value="listed">Has a listed watch option</option><option value="subscription">Subscription streaming</option><option value="free">Free / ad-supported</option><option value="rent_buy">Rent or buy</option></select></label>
+          <label>Results<select id="limit"><option>10</option><option selected>20</option><option>30</option></select></label>
+          <button id="apply" type="button">Update results</button>
+        </section>
+
+        <section class="movie-search" aria-label="Expected score lookup">
+          <div><span class="context-label">CURIOUS ABOUT A TITLE?</span><strong>Look up its expected score</strong></div>
+          <input id="movie-query" type="search" minlength="2" placeholder="Try Alien, Parasite, or Casablanca…" />
+          <input id="movie-search-year" type="number" min="1870" max="2200" placeholder="Year · optional" aria-label="Movie release year" />
+          <button id="search-movie" class="secondary-button" type="button">Score this movie</button>
+        </section>
+        <section id="search-status" class="status-message" aria-live="polite"></section>
+        <section id="search-results" class="recommendations search-results" aria-live="polite"></section>
+
+        <section class="context" aria-live="polite">
+          <div><span class="context-label">RECOMMENDATIONS</span><strong id="active-view">All years · any audience reach</strong></div>
+          <div id="catalog-range" class="catalog-range"></div>
+        </section>
+        <section id="metrics" class="metrics" aria-label="Ranking quality"></section>
+        <section id="notice" class="notice" hidden></section>
+        <section id="recommendations" class="recommendations" aria-live="polite"></section>
+
+        <section class="bottom-five-heading">
+          <span class="context-label">THE OTHER END</span>
+          <h2>Least likely matches in this view</h2>
+          <p>Taste predictions—not claims that these movies are objectively bad.</p>
+        </section>
+        <section id="lowest-recommendations" class="recommendations lowest" aria-live="polite"></section>
+      </section>
+
+      <section id="profiles-view" class="app-view" hidden>
+        <section class="profiles-hero">
+          <div><span class="context-label">PROFILE LIBRARY</span><h2>Understand and manage a taste profile.</h2><p>Explore viewing patterns, model accuracy and rating history, or update the data that powers recommendations.</p></div>
+          <label class="profile-management-picker">Profile to manage<select id="manage-profile-select" aria-label="Profile to manage"></select></label>
+        </section>
+        <section id="profile-management-host" class="profile-management-host"></section>
+        <section id="profiles-empty-state" class="empty-profile-state" hidden>
+          <strong>No profiles to manage yet</strong>
+          <p>Go to <b>For me</b> and use <b>Add profile</b> to import a Letterboxd ZIP.</p>
+        </section>
+      </section>
+
+      <section id="group-view" class="app-view" hidden>
+        <section class="group-hero">
+          <div><span class="context-label">MOVIE NIGHT</span><h2>Find the film everyone can enjoy.</h2><p>Choose two to four saved profiles. The ranking rewards a strong group average while avoiding a weak match for any one person.</p></div>
+        </section>
+        <section class="group-builder" aria-label="Group profiles">
+          <label>Person 1<select class="group-profile" aria-label="Person 1 profile"></select></label>
+          <label>Person 2<select class="group-profile" aria-label="Person 2 profile"></select></label>
+          <label>Person 3 · optional<select class="group-profile" aria-label="Person 3 profile"></select></label>
+          <label>Person 4 · optional<select class="group-profile" aria-label="Person 4 profile"></select></label>
+        </section>
+        <section class="controls group-controls" aria-label="Group filters">
+          <label>From year<input id="group-year-min" type="number" min="1870" max="2200" placeholder="Any year" /></label>
+          <label>Through year<input id="group-year-max" type="number" min="1870" max="2200" placeholder="Any year" /></label>
+          <label>Genre<select id="group-genre"><option value="">All genres</option><option>Action</option><option>Adventure</option><option>Animation</option><option>Comedy</option><option>Crime</option><option>Documentary</option><option>Drama</option><option>Family</option><option>Fantasy</option><option>History</option><option>Horror</option><option>Music</option><option>Mystery</option><option>Romance</option><option>Science Fiction</option><option>Thriller</option><option>War</option><option>Western</option></select></label>
+          <label>Runtime<select id="group-runtime"><option value="">Any runtime</option><option value="1-59">Under 60 min</option><option value="60-89">60–89 min</option><option value="90-119">90–119 min</option><option value="120-149">120–149 min</option><option value="150-179">150–179 min</option><option value="180-600">180+ min</option></select></label>
+          <label>Audience reach<select id="group-popularity"><option value="all">Any audience reach</option><option value="blockbuster">Blockbuster</option><option value="popular">Popular</option><option value="cult_classic">Cult classic</option><option value="under_the_radar">Under the radar</option><option value="unknown">Unknown / emerging</option></select></label>
+          <label>US content rating<select id="group-certification"><option value="all">Any content rating</option><option value="g">G</option><option value="pg">PG</option><option value="pg-13">PG-13</option><option value="r">R</option><option value="nc-17">NC-17</option><option value="unrated">Unrated / NR</option><option value="other">Other / TV rating</option><option value="unknown">Unknown / not rated</option></select></label>
+          <label>Watch in USA<select id="group-availability"><option value="all">Don't filter availability</option><option value="listed">Has a listed watch option</option><option value="subscription">Subscription streaming</option><option value="free">Free / ad-supported</option><option value="rent_buy">Rent or buy</option></select></label>
+          <label>Results<select id="group-limit"><option selected>10</option><option>20</option><option>30</option></select></label>
+          <button id="build-group" type="button">Find our movie</button>
+          <label class="rewatch-toggle"><input id="group-include-watched" type="checkbox" /><span><b>Include movies everyone has seen</b><small>Movies seen by only part of the group are always eligible. Every prior viewer adds a small penalty so new discoveries remain favored.</small></span></label>
+        </section>
+        <section class="movie-search group-search" aria-label="Group expected score lookup">
+          <div><span class="context-label">CHECK A MOVIE</span><strong>See how it fits everyone</strong></div>
+          <input id="group-movie-query" type="search" minlength="2" placeholder="Search a specific movie…" />
+          <input id="group-movie-search-year" type="number" min="1870" max="2200" placeholder="Year · optional" aria-label="Movie release year" />
+          <button id="search-group-movie" class="secondary-button" type="button">Score for the group</button>
+        </section>
+        <div id="group-search-status" class="status-message" aria-live="polite"></div>
+        <section id="group-search-results" class="recommendations search-results" aria-live="polite"></section>
+        <div id="group-status" class="status-message group-status" aria-live="polite"></div>
+        <section id="group-results" class="recommendations group-results" aria-live="polite"></section>
+        <section id="group-lowest-heading" class="bottom-five-heading" hidden>
+          <span class="context-label">THE OTHER END</span>
+          <h2>Five movies everyone is least likely to enjoy</h2>
+          <p>The closest thing to a shared “would hate” list—still a taste prediction, not a verdict on quality.</p>
+        </section>
+        <section id="group-lowest-results" class="recommendations lowest" aria-live="polite"></section>
+        <section id="group-divisive-heading" class="bottom-five-heading" hidden>
+          <span class="context-label">TASTE SPLITTERS</span>
+          <h2>Each person's biggest taste split</h2>
+          <p>Every selected person gets a section using only movies nobody in the group has rated. It prefers a movie where they lead the group, then falls back to their widest available contrast.</p>
+        </section>
+        <section id="group-divisive-results" class="recommendations" aria-live="polite"></section>
+      </section>
+      <footer class="data-credits">
+        Movie data and images from <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">TMDB</a>.
+        This product uses the TMDB API but is not endorsed or certified by TMDB.
+        Collaborative data derived from <a href="https://grouplens.org/datasets/movielens/32m/" target="_blank" rel="noreferrer">MovieLens 32M</a>.
+      </footer>
+    </main>
+
+    <dialog id="rating-history-dialog" class="rating-history-dialog">
+      <div class="rating-history-heading">
+        <div><span class="context-label">PROFILE HISTORY</span><h2 id="rating-history-title">Rated movies</h2></div>
+        <button id="close-rating-history" class="secondary-button" type="button" aria-label="Close rating history">Close</button>
+      </div>
+      <p id="rating-history-summary" class="rating-history-summary"></p>
+      <div id="rating-history-list" class="rating-history-list"></div>
+    </dialog>
+
+    <dialog id="stat-movies-dialog" class="rating-history-dialog">
+      <div class="rating-history-heading">
+        <div><span class="context-label">TASTE DETAIL</span><h2 id="stat-movies-title">Movies</h2></div>
+        <button id="close-stat-movies" class="secondary-button" type="button" aria-label="Close movies">Close</button>
+      </div>
+      <p id="stat-movies-summary" class="rating-history-summary"></p>
+      <div id="stat-movies-list" class="rating-history-list"></div>
+    </dialog>
+
+    <dialog id="stat-category-dialog" class="rating-history-dialog stat-category-dialog">
+      <div class="rating-history-heading">
+        <div><span class="context-label">CATEGORY OVERVIEW</span><h2 id="stat-category-title">Taste category</h2></div>
+        <button id="close-stat-category" class="secondary-button" type="button" aria-label="Close category overview">Close</button>
+      </div>
+      <p id="stat-category-summary" class="rating-history-summary"></p>
+      <div class="stat-category-columns">
+        <section><h3>Highest expected ratings</h3><div id="stat-category-top" class="stat-category-list"></div></section>
+        <section><h3>Lowest expected ratings</h3><div id="stat-category-bottom" class="stat-category-list"></div></section>
+      </div>
+    </dialog>
+
+    <template id="movie-card-template">
+      <article class="movie-card"><div class="rank"></div><div class="poster-shell"><img class="movie-poster" loading="lazy" /></div><div class="movie-main"><div class="movie-heading"><div class="title-stack"><div class="movie-year"></div><h2 class="movie-title"></h2><div class="badges"></div></div><div class="rating-block"><span class="rating-label">EXPECTED</span><strong class="expected-rating"></strong><span class="rating-scale">/ 5</span><span class="plausible-range"></span></div></div><div class="movie-detail-grid"><div class="movie-copy"><p class="expectation-reason"></p><div class="group-scores"></div><ul class="explanations"></ul><div class="risk-explanation"><strong>Why it may not work for you</strong><ul class="cautions"></ul></div><details class="movie-metadata"><summary>Cast, director &amp; synopsis</summary><div class="metadata-copy"></div></details><details><summary>How this score was built</summary><div class="score-grid"></div></details></div><aside class="streaming-info"></aside></div></div></article>
+    </template>
+    <script src="/static/app.js?v=20260915-web1" defer></script>
+  </body>
+</html>
