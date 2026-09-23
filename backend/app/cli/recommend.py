@@ -19,6 +19,7 @@ from app.services.personal_ratings import (
     personal_tmdb_ratings,
     personal_tmdb_reviews,
 )
+from app.services.profile_artifacts import save_profile_artifact
 from app.services.review_policy import load_review_policy
 from ingestion.tmdb.client import TmdbClient
 from ingestion.tmdb.details_cache import load_or_fetch_details
@@ -474,6 +475,7 @@ def main(
     if persist:
         output_dir.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(output, indent=2), encoding="utf-8")
+        save_profile_artifact(user, "recommendation", scope, output)
     if emit:
         typer.echo(json.dumps({"report": str(target), **output}, indent=2))
     return output

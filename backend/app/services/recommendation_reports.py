@@ -4,6 +4,11 @@ import json
 import re
 from pathlib import Path
 
+from app.services.profile_artifacts import (
+    list_profile_artifacts,
+    load_profile_artifact,
+)
+
 VALID_SCOPES = {"all", "recent", "catalog"}
 VALID_USER = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -44,12 +49,14 @@ def load_recommendation_report(
     if runtime_min is not None and runtime_max is not None and runtime_min > runtime_max:
         raise ValueError("runtime_min cannot be greater than runtime_max")
     artifact = _latest_artifact(artifacts_root)
-    target = artifact / "recommendations" / user / f"{scope}.json"
-    if not target.is_file():
-        raise RecommendationReportNotFound(
-            f"No precomputed {scope} recommendations are available for {user}"
-        )
-    report = json.loads(target.read_text(encoding="utf-8"))
+    report = load_profile_artifact(user, "recommendation", scope)
+    if report is None:
+        target = artifact / "recommendations" / user / f"{scope}.json"
+        if not target.is_file():
+            raise RecommendationReportNotFound(
+                f"No precomputed {scope} recommendations are available for {user}"
+            )
+        report = json.loads(target.read_text(encoding="utf-8"))
     source_recommendations = report.get("recommendations", [])
     normalized_genre = genre.casefold().strip() if genre else None
 
@@ -100,12 +107,15 @@ def available_recommendation_scopes(artifacts_root: Path, user: str) -> dict:
         raise ValueError("Invalid user slug")
     artifact = _latest_artifact(artifacts_root)
     directory = artifact / "recommendations" / user
+    reports = list_profile_artifacts(user, "recommendation")
     scopes = []
     for scope in sorted(VALID_SCOPES):
-        target = directory / f"{scope}.json"
-        if not target.is_file():
-            continue
-        report = json.loads(target.read_text(encoding="utf-8"))
+        report = reports.get(scope)
+        if report is None:
+            target = directory / f"{scope}.json"
+            if not target.is_file():
+                continue
+            report = json.loads(target.read_text(encoding="utf-8"))
         scopes.append(
             {
                 "scope": scope,

@@ -19,9 +19,14 @@ The website is a multi-account service. The downloadable local edition remains p
 - The first sharing permission is `movie_night`: the recipient may use a shared profile in group scoring but cannot see its rating history, reviews, model diagnostics, or export.
 - Movie-night APIs will resolve the union of owned profiles and accepted shares. Every mutation continues to require ownership.
 
-## Persistence required before public launch
+## Persistence
 
-PostgreSQL is authoritative for accounts, profiles, ratings, reviews, mappings, and imports. Generated personal recommendations and model-weight files currently use the filesystem; the next deployment step is to move those small JSON documents into PostgreSQL or S3-compatible object storage. Shared MovieLens/TMDB artifacts remain immutable build assets.
+PostgreSQL is authoritative for accounts, profiles, ratings, reviews, mappings, imports,
+generated recommendation reports, and per-profile review-policy decisions. The application
+keeps optional local JSON mirrors for development, but every user-visible saved ranking can be
+restored from PostgreSQL after a container restart. Personal scoring layers are fitted on demand
+from database ratings instead of being required as durable model files. Shared MovieLens/TMDB
+artifacts remain immutable build assets.
 
 ## Security launch checklist
 
@@ -37,6 +42,7 @@ PostgreSQL is authoritative for accounts, profiles, ratings, reviews, mappings, 
 
 - Render free web service for the Docker container.
 - Supabase or Neon free PostgreSQL for persistent account/profile data.
-- A later object-store integration for generated ranking JSON.
+- Optional object storage later if profile exports or larger generated artifacts need retention.
 
-Free application containers have ephemeral disks. Do not call the website production-ready until every profile-specific file has moved off local disk.
+Free application containers have ephemeral disks. Profile-specific ranking and review-policy
+state now survives in PostgreSQL; local cache files may be discarded and rebuilt safely.

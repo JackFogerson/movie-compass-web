@@ -98,6 +98,27 @@ class ProfileShare(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ProfileArtifact(Base):
+    """Small generated profile documents that must survive web-container restarts."""
+
+    __tablename__ = "profile_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "artifact_type", "artifact_key", name="uq_profile_artifact"
+        ),
+    )
+    id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    artifact_type: Mapped[str] = mapped_column(String(50), index=True)
+    artifact_key: Mapped[str] = mapped_column(String(100))
+    payload_json: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class UserMovieInteraction(Base):
     __tablename__ = "user_movie_interactions"
     __table_args__ = (UniqueConstraint("user_id", "movie_id", name="uq_user_movie_interaction"),)

@@ -8,6 +8,7 @@ __pycache__/
 .mypy_cache/
 data/raw/
 data/processed/
+data/logs/
 data/*.sqlite3
 ml/artifacts/
 *.egg-info/

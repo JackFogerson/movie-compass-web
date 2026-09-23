@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.db.session import SessionLocal
 from app.services.personal_ratings import personal_tmdb_ratings, personal_tmdb_reviews
+from app.services.profile_artifacts import load_profile_artifact, save_profile_artifact
 from ml.evaluation.review_policy import evaluate_review_policy
 
 
@@ -27,11 +28,16 @@ def refresh_review_policy(user: str, details_cache: Path, output: Path) -> dict:
         reviews = personal_tmdb_reviews(session, user)
     policy = evaluate_review_policy(details, ratings, reviews)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(policy.to_dict(), indent=2), encoding="utf-8")
-    return policy.to_dict()
+    value = policy.to_dict()
+    output.write_text(json.dumps(value, indent=2), encoding="utf-8")
+    save_profile_artifact(user, "review_policy", "current", value)
+    return value
 
 
 def load_review_policy(path: Path) -> dict:
+    persisted = load_profile_artifact(path.stem, "review_policy", "current")
+    if persisted is not None:
+        return persisted
     if not path.is_file():
         return {
             "enabled": False,

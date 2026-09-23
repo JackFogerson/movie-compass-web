@@ -10,6 +10,7 @@ This repository is intentionally separate from `movie-compass`, the downloadable
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
+- PostgreSQL persistence for generated recommendation reports and per-profile review policy.
 - Reserved friendship and profile-sharing tables for the future social movie-night flow.
 - PostgreSQL/Alembic migration for accounts and ownership.
 - Responsive login/create-account interface integrated with the existing application.
@@ -30,7 +31,8 @@ See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, stor
 - Audience-reach filters for blockbuster, popular, cult classic, under-the-radar, and unknown/emerging titles. Reach is kept separate from predicted quality.
 - Per-profile Letterboxd ZIP upload, local-first catalog matching, and on-demand model fitting. Only the latest review per film is used, while rewatch counts are retained. Imports return structured JSON even when TMDB is temporarily unreachable, and unmapped films remain safely pending.
 
-Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, authentication, and deployment are not yet complete.
+Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, background job
+processing, the social sharing interface, and production deployment are not yet complete.
 
 ## Fast setup on another Windows laptop
 

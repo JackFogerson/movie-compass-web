@@ -33,6 +33,7 @@ from app.services.group_recommendations import (
 from app.services.letterboxd_import import import_letterboxd_archive
 from app.services.local_catalog_mapping import map_pending_from_artifact
 from app.services.profile_accuracy import profile_accuracy as evaluate_profile_accuracy
+from app.services.profile_artifacts import delete_profile_artifacts, has_profile_artifact
 from app.services.profile_export import build_profile_archive, restore_profile_archive
 from app.services.profile_stats import build_taste_breakdown, movie_category_labels
 from app.services.recommendation_reports import (
@@ -254,7 +255,7 @@ def _tmdb_search_ids(query: str, year: int | None, limit: int) -> list[int]:
         return local_ids
     client = TmdbClient(settings.tmdb_api_key)
     try:
-        results = client.search_movie(query, year)[:limit]
+        results = client.search_movie(query, year, include_adult=True)[:limit]
         ordered_ids = [int(item["id"]) for item in results if item.get("id") is not None]
         available, _ = load_or_fetch_details(
             client,
@@ -445,7 +446,9 @@ def profiles(request: Request) -> dict:
         owners = session.scalars(query).all()
         result = []
         for owner in owners:
-            ranking_ready = (artifact / "recommendations" / owner.slug / "all.json").exists()
+            ranking_ready = has_profile_artifact(owner.slug, "recommendation", "all") or (
+                artifact / "recommendations" / owner.slug / "all.json"
+            ).exists()
             total = (
                 session.scalar(
                     select(func.count())
@@ -921,7 +924,7 @@ def rating_movie_search(
         client = TmdbClient(settings.tmdb_api_key)
         local_results = _local_movie_search_results(q, year, 12)
         try:
-            live_results = client.search_movie(q, year)[:12]
+            live_results = client.search_movie(q, year, include_adult=True)[:12]
             results_by_id = {
                 int(item["id"]): item for item in [*local_results, *live_results] if item.get("id")
             }
@@ -1186,8 +1189,10 @@ def delete_profile(user: str, request: ProfileDeleteRequest) -> dict:
                 status_code=422,
                 detail=f"Type {owner.display_name} or {owner.slug} exactly to confirm deletion",
             )
+        owner_id = owner.id
         session.delete(owner)
         session.commit()
+    delete_profile_artifacts(owner_id)
     warnings = _delete_profile_files(user)
     clear_group_recommendation_cache()
     return {"deleted": user, "warnings": warnings}
