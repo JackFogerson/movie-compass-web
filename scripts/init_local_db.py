@@ -1,9 +1,17 @@
+import sys
+from pathlib import Path
 from shutil import copyfile
 
-from app.core.config import get_settings
-from app.db import models  # noqa: F401
-from app.db.base import Base
-from sqlalchemy import create_engine
+# Always initialize this checkout's schema, even when the local and website
+# editions share a virtual environment containing another editable app package.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.core.config import get_settings  # noqa: E402
+from app.db import models  # noqa: E402,F401
+from app.db.base import Base  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
 
 
 def main() -> None:
