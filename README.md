@@ -16,7 +16,7 @@ This repository is intentionally separate from `movie-compass`, the downloadable
 - Responsive login/create-account interface integrated with the existing application.
 - Docker deployment and Render blueprint; PostgreSQL remains external and persistent.
 
-Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, provide `DATABASE_URL` for persistent PostgreSQL, and keep `TMDB_API_KEY` in the host's secret manager. Never commit those values.
+Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, provide `DATABASE_URL` for persistent PostgreSQL, and keep one shared `TMDB_API_KEY` in the host's secret manager. Website users never enter their own TMDB key: every TMDB request runs on the server with this shared credential. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never the credential itself.
 
 See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, storage, and deployment plan.
 

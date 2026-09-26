@@ -10,6 +10,7 @@ from app.services.profile_artifacts import (
 )
 
 VALID_SCOPES = {"all", "recent", "catalog"}
+VALID_MEDIA_TYPES = {"all", "movie", "tv"}
 VALID_USER = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -38,6 +39,7 @@ def load_recommendation_report(
     runtime_min: int | None = None,
     runtime_max: int | None = None,
     genre: str | None = None,
+    media_type: str = "all",
     limit: int = 20,
 ) -> dict:
     if not VALID_USER.fullmatch(user):
@@ -48,6 +50,8 @@ def load_recommendation_report(
         raise ValueError("year_min cannot be greater than year_max")
     if runtime_min is not None and runtime_max is not None and runtime_min > runtime_max:
         raise ValueError("runtime_min cannot be greater than runtime_max")
+    if media_type not in VALID_MEDIA_TYPES:
+        raise ValueError(f"Invalid media type: {media_type}")
     artifact = _latest_artifact(artifacts_root)
     report = load_profile_artifact(user, "recommendation", scope)
     if report is None:
@@ -78,6 +82,10 @@ def load_recommendation_report(
                 normalized_genre is None
                 or normalized_genre in {str(value).casefold() for value in item.get("genres", [])}
             )
+            and (
+                media_type == "all"
+                or (media_type == "tv") == (int(item.get("tmdb_id") or 0) < 0)
+            )
         )
 
     filtered = [item for item in source_recommendations if matches(item)][:limit]
@@ -93,6 +101,7 @@ def load_recommendation_report(
             "runtime_min": runtime_min,
             "runtime_max": runtime_max,
             "genre": genre,
+            "media_type": media_type,
             "limit": limit,
             "source_recommendations": len(source_recommendations),
             "returned": len(filtered),

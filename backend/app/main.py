@@ -77,6 +77,7 @@ class GroupRecommendationRequest(BaseModel):
     runtime_max: int | None = Field(default=None, ge=1, le=600)
     popularity: str = "all"
     genre: str | None = Field(default=None, max_length=60)
+    media_type: str = Field(default="all", pattern=r"^(all|movie|tv)$")
     country: str = Field(default="US", pattern=r"^[A-Z]{2}$")
     include_watched: bool = False
     limit: int = Field(default=20, ge=1, le=30)
@@ -437,7 +438,11 @@ def frontend() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "environment": settings.app_env}
+    return {
+        "status": "ok",
+        "environment": settings.app_env,
+        "tmdb": "configured" if settings.tmdb_api_key else "missing",
+    }
 
 
 @app.get("/catalog/status")
@@ -1248,6 +1253,7 @@ def group_recommendations(http_request: Request, request: GroupRecommendationReq
             runtime_max=request.runtime_max,
             popularity=request.popularity,
             genre=request.genre,
+            media_type=request.media_type,
             include_watched=request.include_watched,
         )
         return _with_display_metadata(report, request.country)
@@ -1321,6 +1327,7 @@ def recommendations(
     runtime_min: int | None = Query(default=None, ge=1, le=600),
     runtime_max: int | None = Query(default=None, ge=1, le=600),
     genre: str | None = Query(default=None, max_length=60),
+    media_type: str = Query(default="all", pattern=r"^(all|movie|tv)$"),
     country: str = Query(default="US", pattern=r"^[A-Z]{2}$"),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> dict:
@@ -1334,6 +1341,7 @@ def recommendations(
             runtime_min=runtime_min,
             runtime_max=runtime_max,
             genre=genre,
+            media_type=media_type,
             limit=limit,
         )
         return _with_display_metadata(report, country)
@@ -1477,6 +1485,7 @@ def refresh_recommendations(
     limit: int = Query(default=20, ge=1, le=100),
     popularity: str = Query(default="all"),
     genre: str | None = Query(default=None, max_length=60),
+    media_type: str = Query(default="all", pattern=r"^(all|movie|tv)$"),
     country: str = Query(default="US", pattern=r"^[A-Z]{2}$"),
 ) -> dict:
     """Rebuild the combined historical/current ranking for one imported profile."""
@@ -1498,6 +1507,7 @@ def refresh_recommendations(
             runtime_max=runtime_max,
             popularity_tier=popularity,
             genre=genre,
+            media_type=media_type,
             live_tmdb=False,
             persist=True,
             emit=False,
