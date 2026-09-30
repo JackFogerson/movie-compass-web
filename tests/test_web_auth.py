@@ -53,3 +53,54 @@ def test_account_registration_login_and_profile_isolation(monkeypatch) -> None:
     )
     assert logged_in.status_code == 200
     assert client.get("/profiles").status_code == 200
+
+
+def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+    monkeypatch.setattr(
+        settings,
+        "web_session_secret",
+        "test-secret-that-is-long-and-random-enough",
+    )
+
+    alice = TestClient(app)
+    bob = TestClient(app)
+    for client, name, email in (
+        (alice, "Alice", "alice@example.com"),
+        (bob, "Bob", "bob@example.com"),
+    ):
+        response = client.post(
+            "/auth/register",
+            json={
+                "display_name": name,
+                "email": email,
+                "password": "a-strong-test-password",
+            },
+        )
+        assert response.status_code == 201
+
+    requested = alice.post("/friends/request", json={"email": "bob@example.com"})
+    assert requested.status_code == 201
+    friendship_id = requested.json()["friendship_id"]
+    assert alice.get("/friends").json()["outgoing"][0]["display_name"] == "Bob"
+    assert bob.get("/friends").json()["incoming"][0]["display_name"] == "Alice"
+
+    accepted = bob.post(f"/friends/{friendship_id}/accept")
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "accepted"
+    assert alice.get("/friends").json()["friends"][0]["display_name"] == "Bob"
+    assert bob.get("/friends").json()["friends"][0]["display_name"] == "Alice"
+
+    removed = alice.delete(f"/friends/{friendship_id}")
+    assert removed.status_code == 200
+    assert bob.get("/friends").json() == {"friends": [], "incoming": [], "outgoing": []}

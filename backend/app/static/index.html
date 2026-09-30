@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>Movie Compass</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260910-2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260930-social1" />
   </head>
   <body data-user="">
     <header class="site-header">
@@ -46,6 +46,7 @@
         <button class="view-tab active" data-view="personal" type="button"><span>For me</span><small>One taste profile</small></button>
         <button class="view-tab" data-view="group" type="button"><span>Movie night</span><small>Two to four people</small></button>
         <button class="view-tab" data-view="profiles" type="button"><span>Profiles</span><small>History, stats &amp; settings</small></button>
+        <button class="view-tab" data-view="friends" type="button"><span>Friends</span><small>Connect for future movie nights</small></button>
       </nav>
 
       <section id="personal-view" class="app-view">
@@ -167,6 +168,21 @@
         </section>
       </section>
 
+      <section id="friends-view" class="app-view" hidden>
+        <section class="profiles-hero">
+          <div><span class="context-label">YOUR CIRCLE</span><h2>Connect with friends and family.</h2><p>Send a private request by email. Profile sharing for cross-account movie nights is the next social step; accepting a friend does not expose ratings or reviews.</p></div>
+        </section>
+        <section class="friend-request-card">
+          <div><strong>Add a friend</strong><small>Use the email address on their Movie Compass account.</small></div>
+          <form id="friend-request-form" class="friend-request-form">
+            <input id="friend-email" type="email" autocomplete="email" placeholder="friend@example.com" required />
+            <button type="submit">Send request</button>
+          </form>
+          <p id="friend-status" class="status-message" aria-live="polite"></p>
+        </section>
+        <section id="friends-lists" class="friends-lists" aria-live="polite"></section>
+      </section>
+
       <section id="group-view" class="app-view" hidden>
         <section class="group-hero">
           <div><span class="context-label">MOVIE NIGHT</span><h2>Find the film everyone can enjoy.</h2><p>Choose two to four saved profiles. The ranking rewards a strong group average while avoiding a weak match for any one person.</p></div>
@@ -253,6 +269,6 @@
     <template id="movie-card-template">
       <article class="movie-card"><div class="rank"></div><div class="poster-shell"><img class="movie-poster" loading="lazy" /></div><div class="movie-main"><div class="movie-heading"><div class="title-stack"><div class="movie-year"></div><h2 class="movie-title"></h2><div class="badges"></div></div><div class="rating-block"><span class="rating-label">EXPECTED</span><strong class="expected-rating"></strong><span class="rating-scale">/ 5</span><span class="plausible-range"></span></div></div><div class="movie-detail-grid"><div class="movie-copy"><p class="expectation-reason"></p><div class="group-scores"></div><ul class="explanations"></ul><div class="risk-explanation"><strong>Why it may not work for you</strong><ul class="cautions"></ul></div><details class="movie-metadata"><summary>Cast, director &amp; synopsis</summary><div class="metadata-copy"></div></details><details><summary>How this score was built</summary><div class="score-grid"></div></details></div><aside class="streaming-info"></aside></div></div></article>
     </template>
-    <script src="/static/app.js?v=20260915-web1" defer></script>
+    <script src="/static/app.js?v=20260930-social1" defer></script>
   </body>
 </html>

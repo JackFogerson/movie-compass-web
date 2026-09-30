@@ -23,7 +23,15 @@ from tenacity import RetryError
 from app.cli.recommend import main as generate_recommendations
 from app.core.config import get_settings
 from app.core.logging import configure_logging
-from app.db.models import Account, ImportMapping, ImportRun, Movie, User, UserMovieInteraction
+from app.db.models import (
+    Account,
+    Friendship,
+    ImportMapping,
+    ImportRun,
+    Movie,
+    User,
+    UserMovieInteraction,
+)
 from app.db.session import SessionLocal
 from app.services.display_metadata import enrich_display_metadata
 from app.services.group_recommendations import (
@@ -103,6 +111,10 @@ class AccountCredentials(BaseModel):
 
 class AccountRegistration(AccountCredentials):
     display_name: str = Field(min_length=1, max_length=100)
+
+
+class FriendRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
 
 
 class ManualRatingRequest(BaseModel):
@@ -323,6 +335,14 @@ def _require_owned_profiles(account_id: int | None, profile_slugs: list[str]) ->
         raise HTTPException(status_code=404, detail="One or more profiles were not found")
 
 
+def _account_summary(account: Account) -> dict:
+    return {
+        "id": account.id,
+        "display_name": account.display_name,
+        "email": account.email,
+    }
+
+
 @app.middleware("http")
 async def authenticate_web_request(request: Request, call_next):
     if not settings.web_auth_required:
@@ -429,6 +449,133 @@ def current_account(request: Request) -> dict:
         if account is None:
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         return {"id": account.id, "email": account.email, "display_name": account.display_name}
+
+
+@app.get("/friends")
+def list_friends(request: Request) -> dict:
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        relationships = session.scalars(
+            select(Friendship).where(
+                (Friendship.requester_id == account_id)
+                | (Friendship.addressee_id == account_id)
+            )
+        ).all()
+        account_ids = {
+            relationship.addressee_id
+            if relationship.requester_id == account_id
+            else relationship.requester_id
+            for relationship in relationships
+        }
+        accounts = {
+            account.id: account
+            for account in session.scalars(select(Account).where(Account.id.in_(account_ids)))
+        } if account_ids else {}
+        result = {"friends": [], "incoming": [], "outgoing": []}
+        for relationship in relationships:
+            other_id = (
+                relationship.addressee_id
+                if relationship.requester_id == account_id
+                else relationship.requester_id
+            )
+            other = accounts.get(other_id)
+            if other is None:
+                continue
+            item = {"friendship_id": relationship.id, **_account_summary(other)}
+            if relationship.status == "accepted":
+                result["friends"].append(item)
+            elif relationship.status == "pending" and relationship.addressee_id == account_id:
+                result["incoming"].append(item)
+            elif relationship.status == "pending":
+                result["outgoing"].append(item)
+        for values in result.values():
+            values.sort(key=lambda item: (item["display_name"].casefold(), item["email"]))
+        return result
+
+
+@app.post("/friends/request", status_code=201)
+def request_friend(request: Request, payload: FriendRequest) -> dict:
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    email = normalize_email(payload.email)
+    with SessionLocal() as session:
+        addressee = session.scalar(select(Account).where(Account.email == email))
+        if addressee is None:
+            raise HTTPException(status_code=404, detail="No Movie Compass account uses that email")
+        if addressee.id == account_id:
+            raise HTTPException(status_code=422, detail="You cannot add your own account")
+        existing = session.scalar(
+            select(Friendship).where(
+                (
+                    (Friendship.requester_id == account_id)
+                    & (Friendship.addressee_id == addressee.id)
+                )
+                | (
+                    (Friendship.requester_id == addressee.id)
+                    & (Friendship.addressee_id == account_id)
+                )
+            )
+        )
+        if existing is not None:
+            if existing.status == "accepted":
+                raise HTTPException(status_code=409, detail="You are already friends")
+            if existing.status == "pending" and existing.addressee_id == account_id:
+                existing.status = "accepted"
+                session.commit()
+                return {
+                    "status": "accepted",
+                    "friendship_id": existing.id,
+                    **_account_summary(addressee),
+                }
+            raise HTTPException(status_code=409, detail="A friend request is already pending")
+        friendship = Friendship(
+            requester_id=account_id,
+            addressee_id=addressee.id,
+            status="pending",
+        )
+        session.add(friendship)
+        session.commit()
+        session.refresh(friendship)
+        return {"status": "pending", "friendship_id": friendship.id, **_account_summary(addressee)}
+
+
+@app.post("/friends/{friendship_id}/accept")
+def accept_friend(friendship_id: int, request: Request) -> dict:
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        friendship = session.get(Friendship, friendship_id)
+        if (
+            friendship is None
+            or friendship.addressee_id != account_id
+            or friendship.status != "pending"
+        ):
+            raise HTTPException(status_code=404, detail="Pending friend request not found")
+        friendship.status = "accepted"
+        requester = session.get(Account, friendship.requester_id)
+        session.commit()
+        return {"status": "accepted", "friendship_id": friendship.id, **_account_summary(requester)}
+
+
+@app.delete("/friends/{friendship_id}")
+def remove_friend(friendship_id: int, request: Request) -> dict:
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        friendship = session.get(Friendship, friendship_id)
+        if friendship is None or account_id not in {
+            friendship.requester_id,
+            friendship.addressee_id,
+        }:
+            raise HTTPException(status_code=404, detail="Friendship not found")
+        session.delete(friendship)
+        session.commit()
+    return {"removed": friendship_id}
 
 
 @app.get("/", include_in_schema=False)

@@ -8,6 +8,7 @@
 4. **Confidence and calibration dashboard** — distinguish expected rating, plausible interval, evidence strength, and cold-start uncertainty; monitor calibration as new ratings arrive.
 5. **Catalog resolution interface** — expose ambiguous Letterboxd matches, missing TMDB records, and duplicate/title-edition decisions in the frontend.
 6. **Production hardening** — background jobs, progress reporting, authentication, encrypted private exports, rate limiting, backups, and deployment.
+7. **Friend profile sharing** — friendship requests are implemented; next let owners grant selected profiles for movie-night scoring without revealing rating history, reviews, diagnostics, or exports.
 
 ## Feature ideas worth considering
 

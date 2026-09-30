@@ -70,6 +70,10 @@ const profileEditor = document.querySelector(".profile-editor");
 const manageProfileSelect = document.querySelector("#manage-profile-select");
 const profileManagementHost = document.querySelector("#profile-management-host");
 const profilesEmptyState = document.querySelector("#profiles-empty-state");
+const friendRequestForm = document.querySelector("#friend-request-form");
+const friendEmailInput = document.querySelector("#friend-email");
+const friendStatus = document.querySelector("#friend-status");
+const friendsLists = document.querySelector("#friends-lists");
 const emptyProfileState = document.querySelector("#empty-profile-state");
 const profileArchiveInput = document.querySelector("#profile-archive");
 const importButton = document.querySelector("#import-profile");
@@ -520,13 +524,91 @@ async function loadProfiles(preferred = null) {
 }
 
 function switchView(view) {
-  const selected = ["personal", "group", "profiles"].includes(view) ? view : "personal";
+  const selected = ["personal", "group", "profiles", "friends"].includes(view) ? view : "personal";
   document.querySelector("#personal-view").hidden = selected !== "personal";
   document.querySelector("#group-view").hidden = selected !== "group";
   document.querySelector("#profiles-view").hidden = selected !== "profiles";
+  document.querySelector("#friends-view").hidden = selected !== "friends";
   viewTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === selected));
-  const destination = selected === "group" ? "#movie-night" : selected === "profiles" ? "#profiles" : location.pathname;
+  const destination = selected === "group"
+    ? "#movie-night"
+    : selected === "profiles"
+      ? "#profiles"
+      : selected === "friends"
+        ? "#friends"
+        : location.pathname;
   history.replaceState(null, "", destination);
+  if (selected === "friends") loadFriends();
+}
+
+function friendRows(items, action = "remove") {
+  if (!items.length) return '<div class="empty compact-empty">None right now.</div>';
+  return items.map((item) => `
+    <article class="friend-row">
+      <div><strong>${escapeHtml(item.display_name)}</strong><small>${escapeHtml(item.email)}</small></div>
+      <div class="friend-actions">
+        ${action === "accept" ? `<button class="secondary-button" data-friend-action="accept" data-friendship-id="${item.friendship_id}" type="button">Accept</button>` : ""}
+        <button class="secondary-button" data-friend-action="remove" data-friendship-id="${item.friendship_id}" type="button">${action === "remove" ? "Remove" : "Cancel"}</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function loadFriends() {
+  friendsLists.innerHTML = '<div class="empty">Loading your connections…</div>';
+  try {
+    const response = await fetch("/friends");
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Friends could not be loaded");
+    friendsLists.innerHTML = `
+      <section><span class="context-label">FRIENDS</span>${friendRows(result.friends)}</section>
+      <section><span class="context-label">REQUESTS TO YOU</span>${friendRows(result.incoming, "accept")}</section>
+      <section><span class="context-label">SENT REQUESTS</span>${friendRows(result.outgoing, "cancel")}</section>
+    `;
+  } catch (error) {
+    friendsLists.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function sendFriendRequest(event) {
+  event.preventDefault();
+  friendStatus.textContent = "Sending request…";
+  try {
+    const response = await fetch("/friends/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: friendEmailInput.value }),
+    });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Friend request could not be sent");
+    friendStatus.textContent = result.status === "accepted"
+      ? `You and ${result.display_name} are now friends.`
+      : `Request sent to ${result.display_name}.`;
+    friendRequestForm.reset();
+    await loadFriends();
+  } catch (error) {
+    friendStatus.textContent = error.message;
+  }
+}
+
+async function changeFriendship(event) {
+  const button = event.target.closest("[data-friend-action]");
+  if (!button) return;
+  const friendshipId = button.dataset.friendshipId;
+  const accepting = button.dataset.friendAction === "accept";
+  button.disabled = true;
+  try {
+    const response = await fetch(`/friends/${friendshipId}${accepting ? "/accept" : ""}`, {
+      method: accepting ? "POST" : "DELETE",
+    });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Connection could not be updated");
+    friendStatus.textContent = accepting ? `You and ${result.display_name} are now friends.` : "Connection removed.";
+    await loadFriends();
+  } catch (error) {
+    friendStatus.textContent = error.message;
+    button.disabled = false;
+  }
 }
 
 async function loadRecommendations({ refresh = false } = {}) {
@@ -1322,6 +1404,16 @@ signOutButton.addEventListener("click", async () => {
   localStorage.removeItem("movie-compass-profile");
   location.replace("/");
 });
+friendRequestForm.addEventListener("submit", sendFriendRequest);
+friendsLists.addEventListener("click", changeFriendship);
 authDialog.addEventListener("cancel", (event) => event.preventDefault());
 bootstrapApplication();
-switchView(location.hash === "#movie-night" ? "group" : location.hash === "#profiles" ? "profiles" : "personal");
+switchView(
+  location.hash === "#movie-night"
+    ? "group"
+    : location.hash === "#profiles"
+      ? "profiles"
+      : location.hash === "#friends"
+        ? "friends"
+        : "personal",
+);

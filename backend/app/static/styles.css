@@ -82,7 +82,7 @@ h1 {
 
 .view-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 240px));
+  grid-template-columns: repeat(4, minmax(0, 240px));
   gap: 8px;
   margin-bottom: 22px;
   padding-bottom: 14px;
@@ -125,6 +125,18 @@ h1 {
 .profile-management-host .profile-editor { display: block; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .profile-management-host .profile-editor > summary { display: none; }
 .profile-management-host .profile-editor-form { margin-top: 0; padding-top: 0; border-top: 0; }
+.friend-request-card { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.4fr); gap: 18px; align-items: end; margin-bottom: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.friend-request-card small, .friend-row small { display: block; margin-top: 4px; color: var(--muted); }
+.friend-request-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.friend-request-form input { min-width: 0; }
+.friend-request-card .status-message { grid-column: 1 / -1; margin: 0; }
+.friends-lists { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.friends-lists > section { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+.friend-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.friend-row:last-child { border-bottom: 0; }
+.friend-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+.friend-actions button { min-height: 34px; padding: 7px 10px; }
+.compact-empty { margin-top: 12px; padding: 22px 10px; }
 
 .profile-bar {
   display: grid;
@@ -456,6 +468,7 @@ summary { cursor: pointer; }
   .movie-search { grid-template-columns: 1fr 1fr; }
   .movie-search > div { grid-column: 1 / -1; }
   .group-builder { grid-template-columns: 1fr 1fr; }
+  .friends-lists { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {
@@ -474,7 +487,7 @@ summary { cursor: pointer; }
   h1 { font-size: 2.75rem; }
   .view-tabs { grid-template-columns: 1fr; }
   .profiles-hero, .taste-stat-grid { grid-template-columns: 1fr; }
-  .profile-bar, .import-form, .profile-editor-form, .profile-update-form, .manual-rating-search, .manual-rating-fields, .stats-filter, .danger-zone, .controls, .movie-search, .group-builder { grid-template-columns: 1fr; }
+  .profile-bar, .import-form, .profile-editor-form, .profile-update-form, .manual-rating-search, .manual-rating-fields, .stats-filter, .danger-zone, .controls, .movie-search, .group-builder, .friend-request-card, .friend-request-form { grid-template-columns: 1fr; }
   .stats-filter > div { grid-column: auto; }
   .profile-summary, .import-drawer, .profile-drawer, .import-form button, .profile-editor-form button, .profile-update-form > div, .selected-manual-movie, .manual-review-label, .danger-zone > div, .controls button, .movie-search > div { grid-column: auto; }
   .context { display: block; }

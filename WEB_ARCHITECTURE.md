@@ -12,12 +12,14 @@ The website is a multi-account service. The downloadable local edition remains p
 - Profile IDs remain globally unique in the initial web release. The UI reports a collision instead of accessing another account's profile.
 - Signed HTTP-only cookies authenticate browser requests. Production cookies must be HTTPS-only.
 
-## Social model reserved for the next phase
+## Social model
 
 - `friendships`: directional request with `pending`, `accepted`, or `blocked` status.
 - `profile_shares`: an explicit grant from a profile owner to another account.
+- The Friends screen now supports email-based requests, acceptance, cancellation, and removal.
+- Friendship alone exposes no profile, rating, review, export, or model data.
 - The first sharing permission is `movie_night`: the recipient may use a shared profile in group scoring but cannot see its rating history, reviews, model diagnostics, or export.
-- Movie-night APIs will resolve the union of owned profiles and accepted shares. Every mutation continues to require ownership.
+- Cross-account profile grants and shared movie-night selection are the next social milestone. Every mutation continues to require ownership.
 
 ## Persistence
 
