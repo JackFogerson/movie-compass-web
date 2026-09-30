@@ -64,6 +64,7 @@ from app.services.web_auth import (
 from ingestion.letterboxd.parser import normalize_title
 from ingestion.tmdb.client import (
     TmdbClient,
+    TmdbError,
     is_tv_catalog_id,
     normalize_tv_details,
     normalize_tv_search_result,
@@ -365,7 +366,9 @@ async def authenticate_web_request(request: Request, call_next):
         request.state.account_id = None
         return await call_next(request)
     path = request.url.path
-    public = path == "/" or path == "/health" or path.startswith(("/static/", "/auth/"))
+    public = path in {"/", "/health", "/tmdb/status"} or path.startswith(
+        ("/static/", "/auth/")
+    )
     if public:
         return await call_next(request)
     token = request.cookies.get(COOKIE_NAME, "")
@@ -715,6 +718,43 @@ def health() -> dict[str, str]:
         "environment": settings.app_env,
         "tmdb": "configured" if settings.tmdb_api_key else "missing",
     }
+
+
+@app.get("/tmdb/status")
+def tmdb_status() -> dict:
+    """Actively verify TMDB while advertising the bundled-catalog fallback."""
+    if not settings.tmdb_api_key:
+        return {
+            "configured": False,
+            "live": False,
+            "fallback_available": True,
+            "message": "TMDB key missing; bundled catalog is available.",
+        }
+    client = TmdbClient(settings.tmdb_api_key)
+    try:
+        client.check_connection()
+        return {
+            "configured": True,
+            "live": True,
+            "fallback_available": True,
+            "message": "TMDB live connection is working.",
+        }
+    except RetryError:
+        return {
+            "configured": True,
+            "live": False,
+            "fallback_available": True,
+            "message": "TMDB network is temporarily unavailable; bundled catalog is active.",
+        }
+    except TmdbError as error:
+        return {
+            "configured": True,
+            "live": False,
+            "fallback_available": True,
+            "message": str(error),
+        }
+    finally:
+        client.close()
 
 
 @app.get("/catalog/status")

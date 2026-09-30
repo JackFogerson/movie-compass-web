@@ -1,4 +1,5 @@
 let user = document.body.dataset.user;
+const tmdbStatus = document.querySelector("#tmdb-status");
 const authDialog = document.querySelector("#auth-dialog");
 const authStatus = document.querySelector("#auth-status");
 const loginForm = document.querySelector("#login-form");
@@ -163,6 +164,21 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+async function loadTmdbStatus() {
+  try {
+    const response = await fetch("/tmdb/status");
+    const result = await responseJson(response);
+    tmdbStatus.classList.remove("checking");
+    tmdbStatus.classList.add(result.live ? "live" : "offline");
+    tmdbStatus.textContent = result.live ? "TMDB live" : "TMDB offline · catalog active";
+    tmdbStatus.title = result.message;
+  } catch (_error) {
+    tmdbStatus.classList.remove("checking");
+    tmdbStatus.classList.add("offline");
+    tmdbStatus.textContent = "TMDB status unavailable";
+  }
 }
 
 function metric(label, value) {
@@ -1481,6 +1497,7 @@ friendRequestForm.addEventListener("submit", sendFriendRequest);
 friendsLists.addEventListener("click", changeFriendship);
 friendsLists.addEventListener("click", changeProfileShare);
 authDialog.addEventListener("cancel", (event) => event.preventDefault());
+loadTmdbStatus();
 bootstrapApplication();
 switchView(
   location.hash === "#movie-night"
