@@ -29,6 +29,7 @@ from app.db.models import (
     ImportMapping,
     ImportRun,
     Movie,
+    ProfileShare,
     User,
     UserMovieInteraction,
 )
@@ -115,6 +116,10 @@ class AccountRegistration(AccountCredentials):
 
 class FriendRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
+
+
+class ProfileShareRequest(BaseModel):
+    profile_slug: str = Field(min_length=1, max_length=100)
 
 
 class ManualRatingRequest(BaseModel):
@@ -318,12 +323,12 @@ def _set_session_cookie(response: JSONResponse, account: Account) -> None:
     )
 
 
-def _require_owned_profiles(account_id: int | None, profile_slugs: list[str]) -> None:
+def _require_movie_night_profiles(account_id: int | None, profile_slugs: list[str]) -> None:
     if account_id is None:
         return
     unique_slugs = set(profile_slugs)
     with SessionLocal() as session:
-        owned = set(
+        accessible = set(
             session.scalars(
                 select(User.slug).where(
                     User.owner_account_id == account_id,
@@ -331,7 +336,18 @@ def _require_owned_profiles(account_id: int | None, profile_slugs: list[str]) ->
                 )
             )
         )
-    if owned != unique_slugs:
+        accessible.update(
+            session.scalars(
+                select(User.slug)
+                .join(ProfileShare, ProfileShare.profile_id == User.id)
+                .where(
+                    ProfileShare.account_id == account_id,
+                    ProfileShare.permission == "movie_night",
+                    User.slug.in_(unique_slugs),
+                )
+            )
+        )
+    if accessible != unique_slugs:
         raise HTTPException(status_code=404, detail="One or more profiles were not found")
 
 
@@ -485,6 +501,19 @@ def list_friends(request: Request) -> dict:
                 continue
             item = {"friendship_id": relationship.id, **_account_summary(other)}
             if relationship.status == "accepted":
+                item["shared_profiles"] = [
+                    {"id": profile.id, "slug": profile.slug, "display_name": profile.display_name}
+                    for profile in session.scalars(
+                        select(User)
+                        .join(ProfileShare, ProfileShare.profile_id == User.id)
+                        .where(
+                            User.owner_account_id == account_id,
+                            ProfileShare.account_id == other.id,
+                            ProfileShare.permission == "movie_night",
+                        )
+                        .order_by(User.display_name, User.slug)
+                    )
+                ]
                 result["friends"].append(item)
             elif relationship.status == "pending" and relationship.addressee_id == account_id:
                 result["incoming"].append(item)
@@ -573,9 +602,105 @@ def remove_friend(friendship_id: int, request: Request) -> dict:
             friendship.addressee_id,
         }:
             raise HTTPException(status_code=404, detail="Friendship not found")
+        account_pair = {friendship.requester_id, friendship.addressee_id}
+        shares = session.scalars(
+            select(ProfileShare)
+            .join(User, User.id == ProfileShare.profile_id)
+            .where(
+                User.owner_account_id.in_(account_pair),
+                ProfileShare.account_id.in_(account_pair),
+            )
+        ).all()
+        for share in shares:
+            session.delete(share)
         session.delete(friendship)
         session.commit()
     return {"removed": friendship_id}
+
+
+@app.post("/friends/{friendship_id}/shares", status_code=201)
+def share_profile(friendship_id: int, request: Request, payload: ProfileShareRequest) -> dict:
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        friendship = session.get(Friendship, friendship_id)
+        if (
+            friendship is None
+            or friendship.status != "accepted"
+            or account_id not in {friendship.requester_id, friendship.addressee_id}
+        ):
+            raise HTTPException(status_code=404, detail="Accepted friendship not found")
+        recipient_id = (
+            friendship.addressee_id
+            if friendship.requester_id == account_id
+            else friendship.requester_id
+        )
+        profile = session.scalar(
+            select(User).where(
+                User.slug == payload.profile_slug,
+                User.owner_account_id == account_id,
+            )
+        )
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Owned profile not found")
+        existing = session.scalar(
+            select(ProfileShare).where(
+                ProfileShare.profile_id == profile.id,
+                ProfileShare.account_id == recipient_id,
+            )
+        )
+        if existing is None:
+            existing = ProfileShare(
+                profile_id=profile.id,
+                account_id=recipient_id,
+                permission="movie_night",
+            )
+            session.add(existing)
+        else:
+            existing.permission = "movie_night"
+        session.commit()
+        session.refresh(existing)
+        return {
+            "share_id": existing.id,
+            "profile_id": profile.id,
+            "profile_slug": profile.slug,
+            "display_name": profile.display_name,
+            "permission": existing.permission,
+        }
+
+
+@app.delete("/friends/{friendship_id}/shares/{profile_id}")
+def unshare_profile(friendship_id: int, profile_id: int, request: Request) -> dict:
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        friendship = session.get(Friendship, friendship_id)
+        if (
+            friendship is None
+            or account_id not in {friendship.requester_id, friendship.addressee_id}
+        ):
+            raise HTTPException(status_code=404, detail="Friendship not found")
+        recipient_id = (
+            friendship.addressee_id
+            if friendship.requester_id == account_id
+            else friendship.requester_id
+        )
+        profile = session.scalar(
+            select(User).where(User.id == profile_id, User.owner_account_id == account_id)
+        )
+        share = session.scalar(
+            select(ProfileShare).where(
+                ProfileShare.profile_id == profile_id,
+                ProfileShare.account_id == recipient_id,
+            )
+        )
+        if profile is None or share is None:
+            raise HTTPException(status_code=404, detail="Shared profile not found")
+        session.delete(share)
+        session.commit()
+    return {"unshared": profile_id}
 
 
 @app.get("/", include_in_schema=False)
@@ -605,6 +730,7 @@ def catalog_status() -> dict:
 def profiles(request: Request) -> dict:
     """List only the profiles owned by the signed-in account."""
     artifact = _latest_artifact(settings.ml_artifacts_dir)
+    shared_profiles = []
     with SessionLocal() as session:
         query = select(User).order_by(User.created_at, User.slug)
         if settings.web_auth_required:
@@ -649,6 +775,7 @@ def profiles(request: Request) -> dict:
             )
             result.append(
                 {
+                    "id": owner.id,
                     "slug": owner.slug,
                     "display_name": owner.display_name,
                     "films": total,
@@ -658,6 +785,25 @@ def profiles(request: Request) -> dict:
                     "ranking_ready": ranking_ready,
                 }
             )
+        if settings.web_auth_required:
+            shared_profiles = [
+                {
+                    "slug": profile.slug,
+                    "display_name": profile.display_name,
+                    "permission": share.permission,
+                    "shared_by": account.display_name,
+                }
+                for profile, share, account in session.execute(
+                    select(User, ProfileShare, Account)
+                    .join(ProfileShare, ProfileShare.profile_id == User.id)
+                    .join(Account, Account.id == User.owner_account_id)
+                    .where(
+                        ProfileShare.account_id == request.state.account_id,
+                        ProfileShare.permission == "movie_night",
+                    )
+                    .order_by(User.display_name, User.slug)
+                )
+            ]
     deduplicated: dict[str, dict] = {}
     for profile in result:
         key = profile["slug"].casefold()
@@ -670,7 +816,10 @@ def profiles(request: Request) -> dict:
             and not existing["ranking_ready"]
         ):
             deduplicated[key] = profile
-    return {"profiles": list(deduplicated.values())}
+    return {
+        "profiles": list(deduplicated.values()),
+        "shared_profiles": shared_profiles,
+    }
 
 
 @app.patch("/profiles/{user}")
@@ -1011,6 +1160,7 @@ def profile_rating_history(user: str) -> dict:
         poster_path = movie.poster_path or metadata.get("poster_path")
         ratings.append(
             {
+                "movie_id": movie.id,
                 "tmdb_id": movie.tmdb_id,
                 "title": movie.title,
                 "year": movie.year,
@@ -1163,6 +1313,75 @@ def rating_movie_search(
             )
             item["current_review_text"] = interaction.review_text if interaction else None
     return {"results": result_rows, "warning": search_warning}
+
+
+@app.delete("/profiles/{user}/ratings/{movie_id}")
+def delete_profile_rating(user: str, movie_id: int) -> dict:
+    """Remove one mistaken rating and rebuild the profile without that movie."""
+    from app.services.recommendation_reports import VALID_USER
+
+    if not VALID_USER.fullmatch(user):
+        raise HTTPException(status_code=422, detail="Invalid profile ID")
+    with SessionLocal() as session:
+        owner = session.scalar(select(User).where(User.slug == user))
+        if owner is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        row = session.execute(
+            select(Movie, UserMovieInteraction)
+            .join(UserMovieInteraction, UserMovieInteraction.movie_id == Movie.id)
+            .where(
+                UserMovieInteraction.user_id == owner.id,
+                UserMovieInteraction.movie_id == movie_id,
+                UserMovieInteraction.rating.is_not(None),
+            )
+        ).one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Rated movie not found")
+        movie, interaction = row
+        title = movie.title
+        mappings = session.scalars(
+            select(ImportMapping).where(
+                ImportMapping.user_id == owner.id,
+                ImportMapping.movie_id == movie.id,
+            )
+        ).all()
+        for mapping in mappings:
+            session.delete(mapping)
+        session.delete(interaction)
+        session.commit()
+
+    review_policy_warning = None
+    try:
+        refresh_review_policy(
+            user,
+            settings.processed_data_dir / "tmdb-rich-details.json",
+            settings.processed_data_dir / "review-policies" / f"{user}.json",
+        )
+    except Exception as error:
+        review_policy_warning = f"Review policy refresh failed: {type(error).__name__}"
+    clear_group_recommendation_cache()
+    ranking_warning = None
+    try:
+        generate_recommendations(
+            _latest_artifact(settings.ml_artifacts_dir),
+            user=user,
+            limit=20,
+            scope="all",
+            live_tmdb=False,
+            persist=True,
+            emit=False,
+        )
+    except Exception as error:
+        ranking_warning = f"Rating removed, but ranking refresh failed: {type(error).__name__}"
+    return {
+        "user": user,
+        "movie_id": movie_id,
+        "title": title,
+        "deleted": True,
+        "ranking_updated": ranking_warning is None,
+        "ranking_warning": ranking_warning,
+        "review_policy_warning": review_policy_warning,
+    }
 
 
 @app.put("/profiles/{user}/ratings")
@@ -1388,7 +1607,7 @@ def delete_profile(user: str, request: ProfileDeleteRequest) -> dict:
 
 @app.post("/groups/recommendations")
 def group_recommendations(http_request: Request, request: GroupRecommendationRequest) -> dict:
-    _require_owned_profiles(http_request.state.account_id, request.users)
+    _require_movie_night_profiles(http_request.state.account_id, request.users)
     try:
         report = generate_group_recommendations(
             _latest_artifact(settings.ml_artifacts_dir),
@@ -1416,7 +1635,7 @@ def group_recommendations(http_request: Request, request: GroupRecommendationReq
 @app.post("/groups/search")
 def group_movie_search(http_request: Request, request: GroupMovieSearchRequest) -> dict:
     """Search TMDB and score exact matches for every profile in a movie-night group."""
-    _require_owned_profiles(http_request.state.account_id, request.users)
+    _require_movie_night_profiles(http_request.state.account_id, request.users)
     try:
         tmdb_ids = _tmdb_search_ids(request.query, request.year, request.limit)
         if not tmdb_ids:

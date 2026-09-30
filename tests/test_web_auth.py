@@ -2,6 +2,7 @@ from importlib import import_module
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.models import User
 from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -42,7 +43,7 @@ def test_account_registration_login_and_profile_isolation(monkeypatch) -> None:
     assert registered.status_code == 201
     assert registered.json()["email"] == "fan@example.com"
     assert client.get("/auth/me").json()["display_name"] == "Movie Fan"
-    assert client.get("/profiles").json() == {"profiles": []}
+    assert client.get("/profiles").json() == {"profiles": [], "shared_profiles": []}
 
     assert client.post("/auth/logout").status_code == 200
     assert client.get("/profiles").status_code == 401
@@ -75,6 +76,7 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
 
     alice = TestClient(app)
     bob = TestClient(app)
+    account_ids = {}
     for client, name, email in (
         (alice, "Alice", "alice@example.com"),
         (bob, "Bob", "bob@example.com"),
@@ -88,6 +90,7 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
             },
         )
         assert response.status_code == 201
+        account_ids[name] = response.json()["id"]
 
     requested = alice.post("/friends/request", json={"email": "bob@example.com"})
     assert requested.status_code == 201
@@ -100,6 +103,38 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     assert accepted.json()["status"] == "accepted"
     assert alice.get("/friends").json()["friends"][0]["display_name"] == "Bob"
     assert bob.get("/friends").json()["friends"][0]["display_name"] == "Alice"
+
+    with session_factory() as session:
+        session.add(
+            User(
+                slug="alice-profile",
+                display_name="Alice's Movies",
+                owner_account_id=account_ids["Alice"],
+            )
+        )
+        session.commit()
+    shared = alice.post(
+        f"/friends/{friendship_id}/shares",
+        json={"profile_slug": "alice-profile"},
+    )
+    assert shared.status_code == 201
+    profile_id = shared.json()["profile_id"]
+    assert alice.get("/friends").json()["friends"][0]["shared_profiles"][0][
+        "slug"
+    ] == "alice-profile"
+    assert bob.get("/profiles").json()["shared_profiles"] == [
+        {
+            "slug": "alice-profile",
+            "display_name": "Alice's Movies",
+            "permission": "movie_night",
+            "shared_by": "Alice",
+        }
+    ]
+    main_module._require_movie_night_profiles(account_ids["Bob"], ["alice-profile"])
+
+    unshared = alice.delete(f"/friends/{friendship_id}/shares/{profile_id}")
+    assert unshared.status_code == 200
+    assert bob.get("/profiles").json()["shared_profiles"] == []
 
     removed = alice.delete(f"/friends/{friendship_id}")
     assert removed.status_code == 200

@@ -112,6 +112,7 @@ profileManagementHost.append(profileEditor);
 profileEditor.open = true;
 let catalogStatus = null;
 let savedProfiles = [];
+let sharedGroupProfiles = [];
 let selectedManualMovie = null;
 
 async function submitAccountForm(path, payload) {
@@ -495,22 +496,23 @@ function populateProfileSelectors(preferred = null) {
   profilesEmptyState.hidden = Boolean(savedProfiles.length);
   document.body.dataset.user = user;
 
+  const groupProfiles = [...savedProfiles, ...sharedGroupProfiles];
   const automaticGroup = [
     ...savedProfiles.filter((profile) => profile.slug === user),
-    ...savedProfiles.filter((profile) => profile.slug !== user),
+    ...groupProfiles.filter((profile) => profile.slug !== user),
   ].slice(0, 4);
   groupProfileInputs.forEach((input, index) => {
     const optional = index > 1;
     input.innerHTML = `${optional ? '<option value="">Not added</option>' : '<option value="">Choose a profile</option>'}` +
-      savedProfiles.map((profile) => `<option value="${escapeHtml(profile.slug)}">${escapeHtml(profile.display_name)}</option>`).join("");
+      groupProfiles.map((profile) => `<option value="${escapeHtml(profile.slug)}">${escapeHtml(profile.display_name)}${profile.shared_by ? ` · shared by ${escapeHtml(profile.shared_by)}` : ""}</option>`).join("");
     const fallback = automaticGroup[index]?.slug || "";
-    input.value = savedProfiles.some((profile) => profile.slug === previousGroup[index]) ? previousGroup[index] : (fallback || "");
-    input.disabled = !savedProfiles.length;
+    input.value = groupProfiles.some((profile) => profile.slug === previousGroup[index]) ? previousGroup[index] : (fallback || "");
+    input.disabled = !groupProfiles.length;
   });
   applyButton.disabled = !savedProfiles.length;
   searchMovieButton.disabled = !savedProfiles.length;
-  buildGroupButton.disabled = savedProfiles.length < 2;
-  searchGroupMovieButton.disabled = savedProfiles.length < 2;
+  buildGroupButton.disabled = groupProfiles.length < 2;
+  searchGroupMovieButton.disabled = groupProfiles.length < 2;
   updateProfileSummary();
   syncProfileEditor();
 }
@@ -520,6 +522,7 @@ async function loadProfiles(preferred = null) {
   const result = await responseJson(response);
   if (!response.ok) throw new Error(result.detail || "Could not load saved profiles");
   savedProfiles = result.profiles;
+  sharedGroupProfiles = result.shared_profiles || [];
   populateProfileSelectors(preferred);
 }
 
@@ -543,15 +546,27 @@ function switchView(view) {
 
 function friendRows(items, action = "remove") {
   if (!items.length) return '<div class="empty compact-empty">None right now.</div>';
-  return items.map((item) => `
+  return items.map((item) => {
+    const shared = item.shared_profiles || [];
+    const sharedIds = new Set(shared.map((profile) => profile.id));
+    const available = savedProfiles.filter((profile) => !sharedIds.has(profile.id));
+    const sharing = action === "remove" ? `
+      <div class="friend-sharing">
+        <small>Profiles available to ${escapeHtml(item.display_name)} for Movie Night</small>
+        <div class="shared-profile-tags">${shared.length ? shared.map((profile) => `<span>${escapeHtml(profile.display_name)}<button type="button" aria-label="Stop sharing ${escapeHtml(profile.display_name)}" data-share-action="remove" data-friendship-id="${item.friendship_id}" data-profile-id="${profile.id}">×</button></span>`).join("") : "<em>None shared</em>"}</div>
+        ${available.length ? `<div class="share-profile-form"><select aria-label="Profile to share">${available.map((profile) => `<option value="${escapeHtml(profile.slug)}">${escapeHtml(profile.display_name)}</option>`).join("")}</select><button class="secondary-button" type="button" data-share-action="add" data-friendship-id="${item.friendship_id}">Share profile</button></div>` : ""}
+      </div>` : "";
+    return `
     <article class="friend-row">
-      <div><strong>${escapeHtml(item.display_name)}</strong><small>${escapeHtml(item.email)}</small></div>
+      <div class="friend-identity"><strong>${escapeHtml(item.display_name)}</strong><small>${escapeHtml(item.email)}</small></div>
       <div class="friend-actions">
         ${action === "accept" ? `<button class="secondary-button" data-friend-action="accept" data-friendship-id="${item.friendship_id}" type="button">Accept</button>` : ""}
         <button class="secondary-button" data-friend-action="remove" data-friendship-id="${item.friendship_id}" type="button">${action === "remove" ? "Remove" : "Cancel"}</button>
       </div>
+      ${sharing}
     </article>
-  `).join("");
+  `;
+  }).join("");
 }
 
 async function loadFriends() {
@@ -604,6 +619,37 @@ async function changeFriendship(event) {
     const result = await responseJson(response);
     if (!response.ok) throw new Error(result.detail || "Connection could not be updated");
     friendStatus.textContent = accepting ? `You and ${result.display_name} are now friends.` : "Connection removed.";
+    await loadFriends();
+  } catch (error) {
+    friendStatus.textContent = error.message;
+    button.disabled = false;
+  }
+}
+
+async function changeProfileShare(event) {
+  const button = event.target.closest("[data-share-action]");
+  if (!button) return;
+  const friendshipId = button.dataset.friendshipId;
+  const adding = button.dataset.shareAction === "add";
+  const select = button.closest(".share-profile-form")?.querySelector("select");
+  button.disabled = true;
+  try {
+    const path = adding
+      ? `/friends/${friendshipId}/shares`
+      : `/friends/${friendshipId}/shares/${button.dataset.profileId}`;
+    const response = await fetch(path, adding
+      ? {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profile_slug: select.value }),
+        }
+      : { method: "DELETE" });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Profile sharing could not be updated");
+    friendStatus.textContent = adding
+      ? `${result.display_name} is now available to this friend for Movie Night.`
+      : "Movie Night profile access removed.";
+    await loadProfiles(user);
     await loadFriends();
   } catch (error) {
     friendStatus.textContent = error.message;
@@ -844,6 +890,7 @@ async function showProfileRatings() {
               ${item.review_text ? `<p>${escapeHtml(item.review_text)}</p>` : ""}
             </div>
             <div class="rating-history-score"><strong>${item.rating.toFixed(1)}</strong><span>★ / 5</span>${item.rewatch_count ? `<small>${item.rewatch_count} rewatch${item.rewatch_count === 1 ? "" : "es"}</small>` : ""}</div>
+            <button class="rating-history-delete" type="button" data-movie-id="${item.movie_id}" data-movie-title="${escapeHtml(item.title)}">Delete</button>
           </article>`).join("")
       : '<div class="empty">No rated movies are saved for this profile.</div>';
     ratingHistoryDialog.showModal();
@@ -852,6 +899,31 @@ async function showProfileRatings() {
   } finally {
     showProfileRatingsButton.disabled = false;
     showProfileRatingsButton.textContent = "Rating history";
+  }
+}
+
+async function deleteRating(event) {
+  const button = event.target.closest(".rating-history-delete");
+  if (!button) return;
+  const title = button.dataset.movieTitle;
+  if (!window.confirm(`Delete ${title} from this profile's rating history? This cannot be undone.`)) return;
+  button.disabled = true;
+  button.textContent = "Deleting…";
+  try {
+    const response = await fetch(
+      `/profiles/${encodeURIComponent(user)}/ratings/${encodeURIComponent(button.dataset.movieId)}`,
+      { method: "DELETE" },
+    );
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Rating could not be deleted");
+    await loadProfiles(user);
+    await loadRecommendations();
+    await showProfileRatings();
+    ratingHistorySummary.textContent = `${result.title} was deleted. ${ratingHistorySummary.textContent}`;
+  } catch (error) {
+    ratingHistorySummary.textContent = error.message;
+    button.disabled = false;
+    button.textContent = "Delete";
   }
 }
 
@@ -1319,6 +1391,7 @@ profileStats.addEventListener("click", (event) => {
 });
 showProfileRatingsButton.addEventListener("click", showProfileRatings);
 closeRatingHistoryButton.addEventListener("click", () => ratingHistoryDialog.close());
+ratingHistoryList.addEventListener("click", deleteRating);
 ratingHistoryDialog.addEventListener("click", (event) => {
   if (event.target === ratingHistoryDialog) ratingHistoryDialog.close();
 });
@@ -1406,6 +1479,7 @@ signOutButton.addEventListener("click", async () => {
 });
 friendRequestForm.addEventListener("submit", sendFriendRequest);
 friendsLists.addEventListener("click", changeFriendship);
+friendsLists.addEventListener("click", changeProfileShare);
 authDialog.addEventListener("cancel", (event) => event.preventDefault());
 bootstrapApplication();
 switchView(

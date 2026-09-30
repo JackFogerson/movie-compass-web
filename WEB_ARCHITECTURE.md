@@ -18,8 +18,8 @@ The website is a multi-account service. The downloadable local edition remains p
 - `profile_shares`: an explicit grant from a profile owner to another account.
 - The Friends screen now supports email-based requests, acceptance, cancellation, and removal.
 - Friendship alone exposes no profile, rating, review, export, or model data.
-- The first sharing permission is `movie_night`: the recipient may use a shared profile in group scoring but cannot see its rating history, reviews, model diagnostics, or export.
-- Cross-account profile grants and shared movie-night selection are the next social milestone. Every mutation continues to require ownership.
+- The first sharing permission is `movie_night`: an owner can grant or revoke individual profiles, and the recipient may use them in group scoring but cannot see rating history, reviews, model diagnostics, or exports.
+- Movie-night APIs resolve the union of owned profiles and explicit `movie_night` grants. Every profile mutation continues to require ownership.
 
 ## Persistence
 

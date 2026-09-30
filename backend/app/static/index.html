@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>Movie Compass</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260930-social1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260930-rating-delete1" />
   </head>
   <body data-user="">
     <header class="site-header">
@@ -170,7 +170,7 @@
 
       <section id="friends-view" class="app-view" hidden>
         <section class="profiles-hero">
-          <div><span class="context-label">YOUR CIRCLE</span><h2>Connect with friends and family.</h2><p>Send a private request by email. Profile sharing for cross-account movie nights is the next social step; accepting a friend does not expose ratings or reviews.</p></div>
+          <div><span class="context-label">YOUR CIRCLE</span><h2>Connect with friends and family.</h2><p>Send a private request by email, then choose exactly which profiles they may use for Movie Night. Shared profiles reveal predictions in group results—not rating history, reviews, statistics, diagnostics, or exports.</p></div>
         </section>
         <section class="friend-request-card">
           <div><strong>Add a friend</strong><small>Use the email address on their Movie Compass account.</small></div>
@@ -269,6 +269,6 @@
     <template id="movie-card-template">
       <article class="movie-card"><div class="rank"></div><div class="poster-shell"><img class="movie-poster" loading="lazy" /></div><div class="movie-main"><div class="movie-heading"><div class="title-stack"><div class="movie-year"></div><h2 class="movie-title"></h2><div class="badges"></div></div><div class="rating-block"><span class="rating-label">EXPECTED</span><strong class="expected-rating"></strong><span class="rating-scale">/ 5</span><span class="plausible-range"></span></div></div><div class="movie-detail-grid"><div class="movie-copy"><p class="expectation-reason"></p><div class="group-scores"></div><ul class="explanations"></ul><div class="risk-explanation"><strong>Why it may not work for you</strong><ul class="cautions"></ul></div><details class="movie-metadata"><summary>Cast, director &amp; synopsis</summary><div class="metadata-copy"></div></details><details><summary>How this score was built</summary><div class="score-grid"></div></details></div><aside class="streaming-info"></aside></div></div></article>
     </template>
-    <script src="/static/app.js?v=20260930-social1" defer></script>
+    <script src="/static/app.js?v=20260930-rating-delete1" defer></script>
   </body>
 </html>

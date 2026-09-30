@@ -188,7 +188,7 @@ def test_fresh_install_can_start_without_profiles(monkeypatch) -> None:
     response = TestClient(app).get("/profiles")
 
     assert response.status_code == 200
-    assert response.json() == {"profiles": []}
+    assert response.json() == {"profiles": [], "shared_profiles": []}
 
 
 def test_profile_rating_history_is_newest_first(monkeypatch) -> None:
