@@ -1233,7 +1233,11 @@ def export_profile(user: str) -> StreamingResponse:
         raise HTTPException(status_code=422, detail="Invalid profile ID")
     try:
         with SessionLocal() as session:
-            content, filename, _ = build_profile_archive(session, user)
+            content, filename, _ = build_profile_archive(
+                session,
+                user,
+                settings.processed_data_dir / "tmdb-rich-details.json",
+            )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
@@ -1787,9 +1791,6 @@ async def import_profile(
         raise HTTPException(status_code=422, detail="Use only letters, numbers, - or _ for profile")
     if not archive.filename or not archive.filename.casefold().endswith(".zip"):
         raise HTTPException(status_code=422, detail="Select a Letterboxd .zip export")
-    if not settings.tmdb_api_key:
-        raise HTTPException(status_code=503, detail="TMDB_API_KEY is not configured")
-
     max_bytes = 100 * 1024 * 1024
     size = 0
     try:
@@ -1820,7 +1821,12 @@ async def import_profile(
                 session.commit()
                 totals = {"processed": 0, "matched": 0, "ambiguous": 0, "unresolved": 0}
                 mapping_warning = None
-                portable_mapping_restored = restore_profile_archive(session, target, user)
+                portable_mapping_restored = restore_profile_archive(
+                    session,
+                    target,
+                    user,
+                    settings.processed_data_dir / "tmdb-rich-details.json",
+                )
                 totals["matched"] += portable_mapping_restored
                 local = map_pending_from_artifact(
                     session,
@@ -1829,8 +1835,13 @@ async def import_profile(
                     settings.processed_data_dir / "tmdb-rich-details.json",
                 )
                 totals["matched"] += local.matched
-                client = TmdbClient(settings.tmdb_api_key)
-                try:
+                client = TmdbClient(settings.tmdb_api_key) if settings.tmdb_api_key else None
+                if client is None:
+                    mapping_warning = (
+                        "Live TMDB mapping is unavailable; exact backup mappings and the "
+                        "bundled catalog were used. Unmapped films remain safely pending."
+                    )
+                else:
                     try:
                         while True:
                             batch = map_pending_letterboxd(
@@ -1869,8 +1880,8 @@ async def import_profile(
                             "the network. "
                             "Unmapped films remain safely pending."
                         )
-                finally:
-                    client.close()
+                    finally:
+                        client.close()
             review_policy = refresh_review_policy(
                 user,
                 settings.processed_data_dir / "tmdb-rich-details.json",
