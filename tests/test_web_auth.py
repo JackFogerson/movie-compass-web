@@ -156,3 +156,38 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     )
     assert removed.status_code == 200
     assert bob.get("/friends").json() == {"friends": [], "incoming": [], "outgoing": []}
+
+
+def test_repeated_login_attempts_are_rate_limited(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+    monkeypatch.setattr(settings, "web_login_attempts", 2)
+    monkeypatch.setattr(settings, "web_login_window_seconds", 60)
+    main_module.login_rate_limiter.clear()
+
+    client = TestClient(app)
+    credentials = {"email": "limited@example.com", "password": "a-strong-test-password"}
+    assert client.post(
+        "/auth/register", json={"display_name": "Limited", **credentials}
+    ).status_code == 201
+    assert client.post("/auth/logout", headers=_csrf_headers(client)).status_code == 200
+
+    for _ in range(2):
+        response = client.post(
+            "/auth/login",
+            json={"email": credentials["email"], "password": "incorrect-password"},
+        )
+        assert response.status_code == 401
+
+    blocked = client.post("/auth/login", json=credentials)
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) > 0

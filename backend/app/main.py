@@ -46,6 +46,7 @@ from app.services.profile_accuracy import profile_accuracy as evaluate_profile_a
 from app.services.profile_artifacts import delete_profile_artifacts, has_profile_artifact
 from app.services.profile_export import build_profile_archive, restore_profile_archive
 from app.services.profile_stats import build_taste_breakdown, movie_category_labels
+from app.services.rate_limit import SlidingWindowRateLimiter
 from app.services.recommendation_reports import (
     RecommendationReportNotFound,
     _latest_artifact,
@@ -81,6 +82,8 @@ configure_logging(settings.log_level)
 app = FastAPI(title="Personal Movie Recommender", version="0.1.0")
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+login_rate_limiter = SlidingWindowRateLimiter()
+profile_import_rate_limiter = SlidingWindowRateLimiter()
 
 
 class GroupRecommendationRequest(BaseModel):
@@ -373,6 +376,20 @@ def _account_summary(account: Account) -> dict:
     }
 
 
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_rate_limit(decision, message: str) -> None:
+    if decision.allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail=message,
+        headers={"Retry-After": str(decision.retry_after_seconds)},
+    )
+
+
 @app.middleware("http")
 async def protect_cookie_authenticated_mutations(request: Request, call_next):
     if (
@@ -465,8 +482,15 @@ def register_account(request: AccountRegistration) -> JSONResponse:
 
 
 @app.post("/auth/login")
-def login_account(request: AccountCredentials) -> JSONResponse:
+def login_account(http_request: Request, request: AccountCredentials) -> JSONResponse:
     email = normalize_email(request.email)
+    rate_key = f"login:{_client_ip(http_request)}:{email}"
+    decision = login_rate_limiter.consume(
+        rate_key,
+        limit=settings.web_login_attempts,
+        window_seconds=settings.web_login_window_seconds,
+    )
+    _enforce_rate_limit(decision, "Too many sign-in attempts. Please wait and try again.")
     with SessionLocal() as session:
         account = session.scalar(select(Account).where(Account.email == email))
         if account is None or not verify_password(request.password, account.password_hash):
@@ -1818,6 +1842,17 @@ async def import_profile(
 ) -> dict:
     """Import a Letterboxd ZIP locally, then map its titles to TMDB."""
     from app.services.recommendation_reports import VALID_USER
+
+    account_key = request.state.account_id or _client_ip(request)
+    decision = profile_import_rate_limiter.consume(
+        f"profile-import:{account_key}",
+        limit=settings.web_profile_imports_per_hour,
+        window_seconds=3600,
+    )
+    _enforce_rate_limit(
+        decision,
+        "Too many profile imports. Please wait before uploading another export.",
+    )
 
     if not VALID_USER.fullmatch(user):
         raise HTTPException(status_code=422, detail="Use only letters, numbers, - or _ for profile")

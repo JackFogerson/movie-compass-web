@@ -9,6 +9,7 @@ This repository is intentionally separate from `movie-compass`, the downloadable
 - Email/password registration and sign-in using Argon2 password hashing.
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Double-submit CSRF protection for every cookie-authenticated mutation.
+- Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
 - PostgreSQL persistence for generated recommendation reports and per-profile review policy.
@@ -33,7 +34,7 @@ See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, stor
 - Per-profile Letterboxd ZIP upload, local-first catalog matching, and on-demand model fitting. Only the latest review per film is used, while rewatch counts are retained. Imports return structured JSON even when TMDB is temporarily unreachable, and unmapped films remain safely pending.
 
 Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, background job
-processing, email verification/password recovery, login and upload throttling, and production
+processing, email verification/password recovery, distributed throttling, and production
 deployment are not yet complete.
 
 ## Fast setup on another Windows laptop

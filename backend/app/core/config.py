@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     web_session_days: int = 30
     web_cookie_secure: bool = False
     web_auth_required: bool = True
+    web_login_attempts: int = 10
+    web_login_window_seconds: int = 900
+    web_profile_imports_per_hour: int = 10
 
     @property
     def raw_data_dir(self) -> Path:
