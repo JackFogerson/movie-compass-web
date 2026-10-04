@@ -37,7 +37,8 @@ artifacts remain immutable build assets.
 3. Add email verification and password reset; move preview throttling to a shared store before
    scaling the web service beyond one instance.
 4. CSRF tokens protect cookie-authenticated mutations; keep them covered by integration tests.
-5. Add account deletion, profile deletion, data export, privacy policy, and retention rules.
+5. Account and profile deletion plus profile export are implemented; add the published privacy
+   policy and formal retention schedule before a public launch.
 6. Run imports/ranking in a background worker with visible job status instead of holding one HTTP request open.
 7. Store no Letterboxd ZIP after import; retain only rating-bearing entries and the user's requested review text.
 

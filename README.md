@@ -10,6 +10,8 @@ This repository is intentionally separate from `movie-compass`, the downloadable
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Double-submit CSRF protection for every cookie-authenticated mutation.
 - Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
+- Password-confirmed account deletion covering owned profiles, ratings, reviews, friendships,
+  sharing grants, and generated personal model data.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
 - PostgreSQL persistence for generated recommendation reports and per-profile review policy.

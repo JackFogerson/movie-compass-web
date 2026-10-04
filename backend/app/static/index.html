@@ -12,7 +12,7 @@
       <div class="brand"><span class="brand-mark">MC</span><span>Movie Compass</span></div>
       <p>Personal predictions from the movies you already know and love.</p>
       <span id="tmdb-status" class="tmdb-status checking" title="Checking live movie-data access">TMDB checking…</span>
-      <div id="account-menu" class="account-menu" hidden><span id="account-name"></span><button id="sign-out" class="secondary-button" type="button">Sign out</button></div>
+      <div id="account-menu" class="account-menu" hidden><span id="account-name"></span><button id="manage-account" class="secondary-button" type="button">Account</button><button id="sign-out" class="secondary-button" type="button">Sign out</button></div>
     </header>
 
     <dialog id="auth-dialog" class="auth-dialog">
@@ -236,6 +236,20 @@
         Collaborative data derived from <a href="https://grouplens.org/datasets/movielens/32m/" target="_blank" rel="noreferrer">MovieLens 32M</a>.
       </footer>
     </main>
+
+    <dialog id="account-dialog" class="auth-dialog account-dialog">
+      <div class="auth-brand"><span class="brand-mark">MC</span><div><strong>Account and privacy</strong><small>Control the personal data stored by Movie Compass.</small></div></div>
+      <div class="account-privacy-copy">
+        <h2>Delete this account</h2>
+        <p>This permanently removes every profile you own, including ratings, reviews, imports, generated model data, friend connections, and profile-sharing permissions. Movie catalog data shared by the service is not personal and is retained.</p>
+      </div>
+      <form id="delete-account-form" class="account-delete-form">
+        <label>Current password<input id="delete-account-password" type="password" autocomplete="current-password" minlength="10" required /></label>
+        <label>Type DELETE<input id="delete-account-confirmation" autocomplete="off" required /></label>
+        <div class="dialog-actions"><button id="close-account-dialog" class="secondary-button" type="button">Cancel</button><button class="danger-button" type="submit">Delete my account permanently</button></div>
+      </form>
+      <p id="delete-account-status" class="status-message" aria-live="polite"></p>
+    </dialog>
 
     <dialog id="rating-history-dialog" class="rating-history-dialog">
       <div class="rating-history-heading">

@@ -54,6 +54,13 @@ button, input, select { font: inherit; }
 .auth-form { display: grid; align-content: start; gap: 13px; padding: 24px 22px; background: #101419; }
 .auth-form h2 { margin: 5px 0 0; font: 500 1.55rem Georgia, serif; }
 .auth-privacy { margin: 0; padding: 0 22px 20px; color: var(--muted); font-size: .7rem; line-height: 1.5; }
+.account-dialog { width: min(620px, calc(100% - 28px)); }
+.account-privacy-copy { padding: 22px 22px 4px; }
+.account-privacy-copy h2 { margin: 0 0 8px; font: 500 1.5rem Georgia, serif; }
+.account-privacy-copy p { margin: 0; color: var(--muted); line-height: 1.6; }
+.account-delete-form { display: grid; gap: 13px; padding: 18px 22px 8px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.account-dialog .status-message { padding: 0 22px 18px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 760; }
 .brand-mark {
   display: grid;

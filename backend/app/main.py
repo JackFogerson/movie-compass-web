@@ -122,6 +122,11 @@ class AccountRegistration(AccountCredentials):
     display_name: str = Field(min_length=1, max_length=100)
 
 
+class AccountDeleteRequest(BaseModel):
+    password: str = Field(min_length=10, max_length=200)
+    confirmation: str = Field(min_length=1, max_length=20)
+
+
 class FriendRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
 
@@ -524,6 +529,43 @@ def current_account(request: Request) -> dict:
         if account is None:
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         return {"id": account.id, "email": account.email, "display_name": account.display_name}
+
+
+@app.delete("/auth/account")
+def delete_account(http_request: Request, request: AccountDeleteRequest) -> JSONResponse:
+    """Permanently remove an account, its profiles, social links, and personal data."""
+    if request.confirmation != "DELETE":
+        raise HTTPException(status_code=422, detail="Type DELETE exactly to confirm")
+    identity = read_session_token(
+        settings.web_session_secret,
+        http_request.cookies.get(COOKIE_NAME, ""),
+        settings.web_session_days * 86_400,
+    )
+    if identity is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        account = session.get(Account, identity.account_id)
+        if account is None or account.email != identity.email:
+            raise HTTPException(status_code=401, detail="Session is no longer valid")
+        if not verify_password(request.password, account.password_hash):
+            raise HTTPException(status_code=401, detail="Password is incorrect")
+        profiles = session.scalars(
+            select(User).where(User.owner_account_id == account.id)
+        ).all()
+        profile_slugs = [profile.slug for profile in profiles]
+        for profile in profiles:
+            session.delete(profile)
+        session.flush()
+        session.delete(account)
+        session.commit()
+    warnings = [warning for slug in profile_slugs for warning in _delete_profile_files(slug)]
+    clear_group_recommendation_cache()
+    response = JSONResponse(
+        {"deleted": True, "profiles_deleted": len(profile_slugs), "warnings": warnings}
+    )
+    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(CSRF_COOKIE_NAME, path="/")
+    return response
 
 
 @app.get("/friends")

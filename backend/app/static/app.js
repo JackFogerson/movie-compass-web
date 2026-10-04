@@ -28,7 +28,12 @@ const loginForm = document.querySelector("#login-form");
 const registerForm = document.querySelector("#register-form");
 const accountMenu = document.querySelector("#account-menu");
 const accountName = document.querySelector("#account-name");
+const manageAccountButton = document.querySelector("#manage-account");
 const signOutButton = document.querySelector("#sign-out");
+const accountDialog = document.querySelector("#account-dialog");
+const closeAccountDialogButton = document.querySelector("#close-account-dialog");
+const deleteAccountForm = document.querySelector("#delete-account-form");
+const deleteAccountStatus = document.querySelector("#delete-account-status");
 const yearMinInput = document.querySelector("#year-min");
 const yearMaxInput = document.querySelector("#year-max");
 const limitInput = document.querySelector("#limit");
@@ -1514,6 +1519,35 @@ signOutButton.addEventListener("click", async () => {
   await fetch("/auth/logout", { method: "POST" });
   localStorage.removeItem("movie-compass-profile");
   location.replace("/");
+});
+manageAccountButton.addEventListener("click", () => {
+  deleteAccountForm.reset();
+  deleteAccountStatus.textContent = "";
+  accountDialog.showModal();
+});
+closeAccountDialogButton.addEventListener("click", () => accountDialog.close());
+deleteAccountForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  deleteAccountStatus.textContent = "Deleting your account…";
+  const submitButton = deleteAccountForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    const response = await fetch("/auth/account", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        password: document.querySelector("#delete-account-password").value,
+        confirmation: document.querySelector("#delete-account-confirmation").value,
+      }),
+    });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Account could not be deleted");
+    localStorage.removeItem("movie-compass-profile");
+    location.replace("/");
+  } catch (error) {
+    deleteAccountStatus.textContent = error.message;
+    submitButton.disabled = false;
+  }
 });
 friendRequestForm.addEventListener("submit", sendFriendRequest);
 friendsLists.addEventListener("click", changeFriendship);

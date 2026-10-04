@@ -2,7 +2,7 @@ from importlib import import_module
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import User
+from app.db.models import Account, User
 from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -191,3 +191,60 @@ def test_repeated_login_attempts_are_rate_limited(monkeypatch) -> None:
     blocked = client.post("/auth/login", json=credentials)
     assert blocked.status_code == 429
     assert int(blocked.headers["Retry-After"]) > 0
+
+
+def test_account_deletion_requires_password_and_removes_personal_data(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    monkeypatch.setattr(main_module, "_delete_profile_files", lambda _slug: [])
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+
+    client = TestClient(app)
+    registered = client.post(
+        "/auth/register",
+        json={
+            "display_name": "Delete Me",
+            "email": "delete@example.com",
+            "password": "a-strong-test-password",
+        },
+    )
+    assert registered.status_code == 201
+    account_id = registered.json()["id"]
+    with session_factory() as session:
+        session.add(
+            User(
+                slug="delete-profile",
+                display_name="Delete Profile",
+                owner_account_id=account_id,
+            )
+        )
+        session.commit()
+
+    rejected = client.request(
+        "DELETE",
+        "/auth/account",
+        headers=_csrf_headers(client),
+        json={"password": "incorrect-password", "confirmation": "DELETE"},
+    )
+    assert rejected.status_code == 401
+
+    deleted = client.request(
+        "DELETE",
+        "/auth/account",
+        headers=_csrf_headers(client),
+        json={"password": "a-strong-test-password", "confirmation": "DELETE"},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["profiles_deleted"] == 1
+    assert client.get("/auth/me").status_code == 401
+    with session_factory() as session:
+        assert session.query(Account).count() == 0
+        assert session.query(User).count() == 0
