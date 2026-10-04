@@ -23,4 +23,4 @@ jobs:
       - name: Validate production migration SQL
         env:
           DATABASE_URL: postgresql+psycopg://movie:movie@localhost:5432/movie_recommender
-        run: alembic upgrade 0004_web_accounts:0005_profile_artifacts --sql
+        run: alembic upgrade head --sql

@@ -42,6 +42,10 @@ artifacts remain immutable build assets.
 6. Run imports/ranking in a background worker with visible job status instead of holding one HTTP request open.
 7. Store no Letterboxd ZIP after import; retain only rating-bearing entries and the user's requested review text.
 
+Production startup now fails closed when PostgreSQL, authentication, secure cookies, the session
+secret, TMDB access, session lifetime, or rate-limit values are unsafe. Browser responses also
+include a restrictive content-security policy and related security headers.
+
 ## Suggested free preview deployment
 
 - Render free web service for the Docker container.

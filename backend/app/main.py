@@ -4,6 +4,7 @@ import io
 import json
 import re
 import secrets
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
@@ -22,7 +23,7 @@ from sqlalchemy import func, select
 from tenacity import RetryError
 
 from app.cli.recommend import main as generate_recommendations
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_production_configuration
 from app.core.logging import configure_logging
 from app.db.models import (
     Account,
@@ -79,7 +80,15 @@ from ingestion.tmdb.details_cache import load_or_fetch_details
 
 settings = get_settings()
 configure_logging(settings.log_level)
-app = FastAPI(title="Personal Movie Recommender", version="0.1.0")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    validate_production_configuration(settings)
+    yield
+
+
+app = FastAPI(title="Personal Movie Recommender", version="0.1.0", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 login_rate_limiter = SlidingWindowRateLimiter()
@@ -463,6 +472,30 @@ async def disable_local_ui_cache(request: Request, call_next):
     if request.url.path == "/" or request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0"
         response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.middleware("http")
+async def add_browser_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "base-uri 'self'; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'; "
+        "img-src 'self' https://image.tmdb.org data:; "
+        "object-src 'none'; "
+        "script-src 'self'; "
+        "style-src 'self'"
+    )
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    if settings.app_env.casefold() == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 

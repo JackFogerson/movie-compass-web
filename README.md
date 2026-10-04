@@ -12,6 +12,8 @@ This repository is intentionally separate from `movie-compass`, the downloadable
 - Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
 - Password-confirmed account deletion covering owned profiles, ratings, reviews, friendships,
   sharing grants, and generated personal model data.
+- Fail-closed production configuration checks and browser security headers covering framing,
+  content types, permissions, referrers, transport security, and content sources.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
 - PostgreSQL persistence for generated recommendation reports and per-profile review policy.

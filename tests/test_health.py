@@ -8,6 +8,9 @@ def test_health() -> None:
     response = TestClient(app).get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 
 def test_tmdb_status_actively_checks_configured_connection(monkeypatch) -> None:
