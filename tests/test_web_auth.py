@@ -10,6 +10,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    return {"X-Movie-Compass-CSRF": client.cookies["movie_compass_csrf"]}
+
+
 def test_account_registration_login_and_profile_isolation(monkeypatch) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -45,7 +49,8 @@ def test_account_registration_login_and_profile_isolation(monkeypatch) -> None:
     assert client.get("/auth/me").json()["display_name"] == "Movie Fan"
     assert client.get("/profiles").json() == {"profiles": [], "shared_profiles": []}
 
-    assert client.post("/auth/logout").status_code == 200
+    assert client.post("/auth/logout").status_code == 403
+    assert client.post("/auth/logout", headers=_csrf_headers(client)).status_code == 200
     assert client.get("/profiles").status_code == 401
 
     logged_in = client.post(
@@ -92,13 +97,19 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
         assert response.status_code == 201
         account_ids[name] = response.json()["id"]
 
-    requested = alice.post("/friends/request", json={"email": "bob@example.com"})
+    requested = alice.post(
+        "/friends/request",
+        json={"email": "bob@example.com"},
+        headers=_csrf_headers(alice),
+    )
     assert requested.status_code == 201
     friendship_id = requested.json()["friendship_id"]
     assert alice.get("/friends").json()["outgoing"][0]["display_name"] == "Bob"
     assert bob.get("/friends").json()["incoming"][0]["display_name"] == "Alice"
 
-    accepted = bob.post(f"/friends/{friendship_id}/accept")
+    accepted = bob.post(
+        f"/friends/{friendship_id}/accept", headers=_csrf_headers(bob)
+    )
     assert accepted.status_code == 200
     assert accepted.json()["status"] == "accepted"
     assert alice.get("/friends").json()["friends"][0]["display_name"] == "Bob"
@@ -116,6 +127,7 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     shared = alice.post(
         f"/friends/{friendship_id}/shares",
         json={"profile_slug": "alice-profile"},
+        headers=_csrf_headers(alice),
     )
     assert shared.status_code == 201
     profile_id = shared.json()["profile_id"]
@@ -132,10 +144,15 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     ]
     main_module._require_movie_night_profiles(account_ids["Bob"], ["alice-profile"])
 
-    unshared = alice.delete(f"/friends/{friendship_id}/shares/{profile_id}")
+    unshared = alice.delete(
+        f"/friends/{friendship_id}/shares/{profile_id}",
+        headers=_csrf_headers(alice),
+    )
     assert unshared.status_code == 200
     assert bob.get("/profiles").json()["shared_profiles"] == []
 
-    removed = alice.delete(f"/friends/{friendship_id}")
+    removed = alice.delete(
+        f"/friends/{friendship_id}", headers=_csrf_headers(alice)
+    )
     assert removed.status_code == 200
     assert bob.get("/friends").json() == {"friends": [], "incoming": [], "outgoing": []}

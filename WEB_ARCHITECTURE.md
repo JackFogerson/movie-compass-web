@@ -35,7 +35,7 @@ artifacts remain immutable build assets.
 1. Set a unique `WEB_SESSION_SECRET` and rotate the TMDB key previously used for local development.
 2. Require HTTPS and `WEB_COOKIE_SECURE=true`.
 3. Add email verification, password reset, login throttling, and upload-rate limits.
-4. Add CSRF tokens before enabling cross-account mutations or friendship actions.
+4. CSRF tokens protect cookie-authenticated mutations; keep them covered by integration tests.
 5. Add account deletion, profile deletion, data export, privacy policy, and retention rules.
 6. Run imports/ranking in a background worker with visible job status instead of holding one HTTP request open.
 7. Store no Letterboxd ZIP after import; retain only rating-bearing entries and the user's requested review text.

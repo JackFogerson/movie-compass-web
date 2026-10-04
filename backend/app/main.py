@@ -3,6 +3,7 @@ import gzip
 import io
 import json
 import re
+import secrets
 from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
@@ -55,6 +56,9 @@ from app.services.review_policy import load_review_policy, refresh_review_policy
 from app.services.tmdb_mapping import map_pending_letterboxd, resolve_letterboxd_links
 from app.services.web_auth import (
     COOKIE_NAME,
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    create_csrf_token,
     create_session_token,
     hash_password,
     normalize_email,
@@ -322,6 +326,15 @@ def _set_session_cookie(response: JSONResponse, account: Account) -> None:
         samesite="lax",
         path="/",
     )
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        create_csrf_token(),
+        max_age=settings.web_session_days * 86_400,
+        httponly=False,
+        secure=settings.web_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
 
 
 def _require_movie_night_profiles(account_id: int | None, profile_slugs: list[str]) -> None:
@@ -358,6 +371,24 @@ def _account_summary(account: Account) -> dict:
         "display_name": account.display_name,
         "email": account.email,
     }
+
+
+@app.middleware("http")
+async def protect_cookie_authenticated_mutations(request: Request, call_next):
+    if (
+        settings.web_auth_required
+        and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        and request.url.path not in {"/auth/login", "/auth/register"}
+        and request.cookies.get(COOKIE_NAME)
+    ):
+        cookie_token = request.cookies.get(CSRF_COOKIE_NAME, "")
+        header_token = request.headers.get(CSRF_HEADER_NAME, "")
+        if not cookie_token or not secrets.compare_digest(cookie_token, header_token):
+            return JSONResponse(
+                {"detail": "Security token is missing or invalid. Refresh and try again."},
+                status_code=403,
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -450,6 +481,7 @@ def login_account(request: AccountCredentials) -> JSONResponse:
 def logout_account() -> JSONResponse:
     response = JSONResponse({"signed_out": True})
     response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(CSRF_COOKIE_NAME, path="/")
     return response
 
 

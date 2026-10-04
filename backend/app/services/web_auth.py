@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pwdlib import PasswordHash
 
 COOKIE_NAME = "movie_compass_session"
+CSRF_COOKIE_NAME = "movie_compass_csrf"
+CSRF_HEADER_NAME = "x-movie-compass-csrf"
 _PASSWORD_HASH = PasswordHash.recommended()
 
 
@@ -25,6 +28,10 @@ def hash_password(value: str) -> str:
 
 def verify_password(value: str, encoded: str) -> bool:
     return _PASSWORD_HASH.verify(value, encoded)
+
+
+def create_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 def create_session_token(secret: str, account_id: int, email: str) -> str:

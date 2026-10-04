@@ -2,6 +2,28 @@ let user = document.body.dataset.user;
 const tmdbStatus = document.querySelector("#tmdb-status");
 const authDialog = document.querySelector("#auth-dialog");
 const authStatus = document.querySelector("#auth-status");
+const browserFetch = window.fetch.bind(window);
+
+function cookieValue(name) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  const item = document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix));
+  return item ? decodeURIComponent(item.slice(prefix.length)) : "";
+}
+
+window.fetch = (input, options = {}) => {
+  const method = String(options.method || "GET").toUpperCase();
+  const target = new URL(typeof input === "string" ? input : input.url, window.location.href);
+  if (target.origin === window.location.origin && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const token = cookieValue("movie_compass_csrf");
+    if (token) {
+      const headers = new Headers(options.headers || {});
+      headers.set("X-Movie-Compass-CSRF", token);
+      options = { ...options, headers };
+    }
+  }
+  return browserFetch(input, options);
+};
+
 const loginForm = document.querySelector("#login-form");
 const registerForm = document.querySelector("#register-form");
 const accountMenu = document.querySelector("#account-menu");
