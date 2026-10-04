@@ -13,6 +13,28 @@ def test_health() -> None:
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 
+def test_readiness_checks_database_catalog_and_tmdb() -> None:
+    response = TestClient(app).get("/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["checks"] == {
+        "database": True,
+        "catalog": True,
+        "tmdb_configured": True,
+    }
+
+
+def test_readiness_rejects_missing_tmdb_configuration(monkeypatch) -> None:
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module.settings, "tmdb_api_key", None)
+
+    response = TestClient(app).get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["checks"]["tmdb_configured"] is False
+
+
 def test_tmdb_status_actively_checks_configured_connection(monkeypatch) -> None:
     main_module = import_module("app.main")
 

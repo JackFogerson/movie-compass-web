@@ -19,7 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from tenacity import RetryError
 
 from app.cli.recommend import main as generate_recommendations
@@ -428,7 +428,7 @@ async def authenticate_web_request(request: Request, call_next):
         request.state.account_id = None
         return await call_next(request)
     path = request.url.path
-    public = path in {"/", "/health", "/tmdb/status"} or path.startswith(
+    public = path in {"/", "/health", "/ready", "/tmdb/status"} or path.startswith(
         ("/static/", "/auth/")
     )
     if public:
@@ -849,6 +849,36 @@ def health() -> dict[str, str]:
         "environment": settings.app_env,
         "tmdb": "configured" if settings.tmdb_api_key else "missing",
     }
+
+
+@app.get("/ready")
+def readiness() -> JSONResponse:
+    """Report whether this instance can safely receive user traffic."""
+    checks = {
+        "database": False,
+        "catalog": False,
+        "tmdb_configured": bool(settings.tmdb_api_key),
+    }
+    try:
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+        checks["database"] = True
+    except Exception:
+        pass
+    try:
+        _latest_artifact(settings.ml_artifacts_dir)
+        checks["catalog"] = True
+    except (RecommendationReportNotFound, OSError):
+        pass
+    ready = all(checks.values())
+    return JSONResponse(
+        {
+            "status": "ready" if ready else "not_ready",
+            "environment": settings.app_env,
+            "checks": checks,
+        },
+        status_code=200 if ready else 503,
+    )
 
 
 @app.get("/tmdb/status")

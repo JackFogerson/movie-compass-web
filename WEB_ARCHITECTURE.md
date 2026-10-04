@@ -45,6 +45,8 @@ artifacts remain immutable build assets.
 Production startup now fails closed when PostgreSQL, authentication, secure cookies, the session
 secret, TMDB access, session lifetime, or rate-limit values are unsafe. Browser responses also
 include a restrictive content-security policy and related security headers.
+`/health` is a lightweight process-liveness check. Hosting and container orchestration use
+`/ready`, which also verifies the database, bundled recommendation catalog, and TMDB setup.
 
 ## Suggested free preview deployment
 

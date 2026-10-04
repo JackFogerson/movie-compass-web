@@ -3,7 +3,7 @@ services:
     name: movie-compass-web
     runtime: docker
     plan: free
-    healthCheckPath: /health
+    healthCheckPath: /ready
     envVars:
       - key: APP_ENV
         value: production

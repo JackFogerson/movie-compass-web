@@ -14,6 +14,8 @@ This repository is intentionally separate from `movie-compass`, the downloadable
   sharing grants, and generated personal model data.
 - Fail-closed production configuration checks and browser security headers covering framing,
   content types, permissions, referrers, transport security, and content sources.
+- Separate liveness and readiness checks so hosting sends traffic only after PostgreSQL, the
+  recommendation catalog, and TMDB configuration are available.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
 - PostgreSQL persistence for generated recommendation reports and per-profile review policy.
