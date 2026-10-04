@@ -1361,9 +1361,23 @@ async function importArchive(slug, archive, button, status, idleLabel) {
   form.set("user", slug);
   form.set("archive", archive);
   try {
-    const response = await fetch("/profiles/import", { method: "POST", body: form });
-    const result = await responseJson(response);
-    if (!response.ok) throw new Error(result.detail || "Import failed");
+    const response = await fetch("/profiles/import/start", { method: "POST", body: form });
+    const queued = await responseJson(response);
+    if (!response.ok) throw new Error(queued.detail || "Import failed");
+    let job;
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const jobResponse = await fetch(`/jobs/${encodeURIComponent(queued.job_id)}`);
+      job = await responseJson(jobResponse);
+      if (!jobResponse.ok) throw new Error(job.detail || "Import progress could not be loaded");
+      status.textContent = job.progress_message || "Import is still running…";
+      if (job.status === "failed") throw new Error(job.error || "Import failed");
+      if (job.status === "succeeded") break;
+    }
+    if (!job || job.status !== "succeeded") {
+      throw new Error("Import is still running. Refresh this page to check the saved profile.");
+    }
+    const result = job.result;
     user = slug;
     document.body.dataset.user = slug;
     status.textContent = `Imported ${result.import.movies_staged} rated films. Building this profile's ranking now…`;

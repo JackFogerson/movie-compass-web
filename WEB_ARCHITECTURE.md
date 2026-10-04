@@ -39,7 +39,8 @@ artifacts remain immutable build assets.
 4. CSRF tokens protect cookie-authenticated mutations; keep them covered by integration tests.
 5. Account and profile deletion plus profile export are implemented; add the published privacy
    policy and formal retention schedule before a public launch.
-6. Run imports/ranking in a background worker with visible job status instead of holding one HTTP request open.
+6. Profile imports now run after the upload response with database-backed private job status.
+   Move execution from the web process to a dedicated worker before scaling beyond one instance.
 7. Store no Letterboxd ZIP after import; retain only rating-bearing entries and the user's requested review text.
 
 Production startup now fails closed when PostgreSQL, authentication, secure cookies, the session

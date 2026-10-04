@@ -16,6 +16,8 @@ This repository is intentionally separate from `movie-compass`, the downloadable
   content types, permissions, referrers, transport security, and content sources.
 - Separate liveness and readiness checks so hosting sends traffic only after PostgreSQL, the
   recommendation catalog, and TMDB configuration are available.
+- Database-backed profile-import jobs that continue after the upload request, expose private
+  progress/results to the initiating account, and remove the temporary ZIP after completion.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
 - PostgreSQL persistence for generated recommendation reports and per-profile review policy.

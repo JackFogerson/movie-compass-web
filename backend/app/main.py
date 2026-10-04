@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import gzip
 import io
@@ -6,16 +7,18 @@ import re
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from shutil import rmtree
 from statistics import median
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from typing import Annotated
+from uuid import uuid4
 
 import typer
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -34,6 +37,7 @@ from app.db.models import (
     ProfileShare,
     User,
     UserMovieInteraction,
+    WebJob,
 )
 from app.db.session import SessionLocal
 from app.services.display_metadata import enrich_display_metadata
@@ -1948,16 +1952,17 @@ async def import_profile(
     """Import a Letterboxd ZIP locally, then map its titles to TMDB."""
     from app.services.recommendation_reports import VALID_USER
 
-    account_key = request.state.account_id or _client_ip(request)
-    decision = profile_import_rate_limiter.consume(
-        f"profile-import:{account_key}",
-        limit=settings.web_profile_imports_per_hour,
-        window_seconds=3600,
-    )
-    _enforce_rate_limit(
-        decision,
-        "Too many profile imports. Please wait before uploading another export.",
-    )
+    if not getattr(request.state, "rate_limit_checked", False):
+        account_key = request.state.account_id or _client_ip(request)
+        decision = profile_import_rate_limiter.consume(
+            f"profile-import:{account_key}",
+            limit=settings.web_profile_imports_per_hour,
+            window_seconds=3600,
+        )
+        _enforce_rate_limit(
+            decision,
+            "Too many profile imports. Please wait before uploading another export.",
+        )
 
     if not VALID_USER.fullmatch(user):
         raise HTTPException(status_code=422, detail="Use only letters, numbers, - or _ for profile")
@@ -2079,6 +2084,163 @@ async def import_profile(
         "mapping_warning": mapping_warning,
         "review_signal_policy": review_policy,
     }
+
+
+def _job_payload(job: WebJob) -> dict:
+    result = None
+    if job.result_json:
+        try:
+            result = json.loads(job.result_json)
+        except json.JSONDecodeError:
+            result = None
+    return {
+        "id": job.id,
+        "job_type": job.job_type,
+        "profile_slug": job.profile_slug,
+        "status": job.status,
+        "progress_message": job.progress_message,
+        "result": result,
+        "error": job.error_message,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+    }
+
+
+def _update_import_job(job_id: str, **values) -> None:
+    with SessionLocal() as session:
+        job = session.get(WebJob, job_id)
+        if job is None:
+            return
+        for key, value in values.items():
+            setattr(job, key, value)
+        job.updated_at = datetime.now(UTC)
+        session.commit()
+
+
+def _run_import_job(job_id: str, archive_path: str, user: str, account_id: int) -> None:
+    path = Path(archive_path)
+    _update_import_job(
+        job_id,
+        status="running",
+        progress_message="Reading ratings, matching titles, and building the taste profile…",
+    )
+    try:
+        with path.open("rb") as handle:
+            upload = UploadFile(file=handle, filename=path.name)
+            job_request = SimpleNamespace(
+                state=SimpleNamespace(account_id=account_id, rate_limit_checked=True)
+            )
+            result = asyncio.run(import_profile(job_request, user, upload))
+        _update_import_job(
+            job_id,
+            status="succeeded",
+            progress_message="Profile import completed.",
+            result_json=json.dumps(result, default=str),
+            completed_at=datetime.now(UTC),
+        )
+    except HTTPException as error:
+        _update_import_job(
+            job_id,
+            status="failed",
+            progress_message="Profile import failed.",
+            error_message=str(error.detail),
+            completed_at=datetime.now(UTC),
+        )
+    except Exception as error:
+        _update_import_job(
+            job_id,
+            status="failed",
+            progress_message="Profile import failed.",
+            error_message=f"{type(error).__name__}: {error}",
+            completed_at=datetime.now(UTC),
+        )
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@app.post("/profiles/import/start", status_code=202)
+async def start_profile_import(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: Annotated[str, Form()],
+    archive: Annotated[UploadFile, File()],
+) -> dict:
+    """Save an upload briefly and process it after returning a durable job ID."""
+    from app.services.recommendation_reports import VALID_USER
+
+    account_id = request.state.account_id
+    if account_id is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    decision = profile_import_rate_limiter.consume(
+        f"profile-import:{account_id}",
+        limit=settings.web_profile_imports_per_hour,
+        window_seconds=3600,
+    )
+    _enforce_rate_limit(
+        decision,
+        "Too many profile imports. Please wait before uploading another export.",
+    )
+    if not VALID_USER.fullmatch(user):
+        raise HTTPException(status_code=422, detail="Use only letters, numbers, - or _ for profile")
+    if not archive.filename or not archive.filename.casefold().endswith(".zip"):
+        raise HTTPException(status_code=422, detail="Select a Letterboxd .zip export")
+    with SessionLocal() as session:
+        existing = session.scalar(select(User).where(User.slug == user))
+        if existing is not None and existing.owner_account_id not in {None, account_id}:
+            raise HTTPException(
+                status_code=409,
+                detail="That profile ID is already used by another account",
+            )
+    job_id = str(uuid4())
+    jobs_dir = settings.data_dir / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    target = jobs_dir / f"{job_id}.zip"
+    size = 0
+    try:
+        with target.open("wb") as handle:
+            while chunk := await archive.read(1024 * 1024):
+                size += len(chunk)
+                if size > 100 * 1024 * 1024:
+                    raise HTTPException(status_code=413, detail="Export exceeds 100 MB")
+                handle.write(chunk)
+        with SessionLocal() as session:
+            session.add(
+                WebJob(
+                    id=job_id,
+                    account_id=account_id,
+                    job_type="profile_import",
+                    profile_slug=user,
+                    status="queued",
+                    progress_message="Upload received; import is queued.",
+                )
+            )
+            session.commit()
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    finally:
+        await archive.close()
+    background_tasks.add_task(_run_import_job, job_id, str(target), user, account_id)
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "progress_message": "Upload received; import is queued.",
+    }
+
+
+@app.get("/jobs/{job_id}")
+def web_job(job_id: str, request: Request) -> dict:
+    with SessionLocal() as session:
+        job = session.scalar(
+            select(WebJob).where(
+                WebJob.id == job_id,
+                WebJob.account_id == request.state.account_id,
+            )
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_payload(job)
 
 
 @app.post("/recommendations/{user}/refresh")

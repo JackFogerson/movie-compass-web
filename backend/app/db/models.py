@@ -66,6 +66,27 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class WebJob(Base):
+    """Durable status for work that continues after the initiating HTTP request."""
+
+    __tablename__ = "web_jobs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"), index=True
+    )
+    job_type: Mapped[str] = mapped_column(String(50), index=True)
+    profile_slug: Mapped[str | None] = mapped_column(String(100), index=True)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    progress_message: Mapped[str] = mapped_column(String(500))
+    result_json: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Friendship(Base):
     __tablename__ = "friendships"
     __table_args__ = (
