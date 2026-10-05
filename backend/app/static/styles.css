@@ -32,6 +32,7 @@ button, input, select { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   min-height: 64px;
   padding: 0 max(24px, calc((100% - 1160px) / 2));
   border-bottom: 1px solid rgba(255, 255, 255, .06);
@@ -42,6 +43,8 @@ button, input, select { font: inherit; }
 .tmdb-status { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: .7rem; white-space: nowrap; }
 .tmdb-status.live { color: var(--green); border-color: rgba(121, 200, 161, .45); }
 .tmdb-status.offline { color: #e7bf76; border-color: rgba(231, 191, 118, .4); }
+.desktop-download { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; color: #111; border: 1px solid var(--gold); border-radius: 8px; background: var(--gold); font-size: .7rem; font-weight: 800; letter-spacing: .035em; text-decoration: none; white-space: nowrap; }
+.desktop-download:hover, .desktop-download:focus-visible { color: #111; background: #f4d17e; transform: translateY(-1px); }
 .account-menu { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .account-menu span { color: var(--muted); font-size: .76rem; }
 .account-menu button { min-height: 34px; padding-inline: 12px; }
@@ -478,6 +481,8 @@ summary { cursor: pointer; }
 
 @media (max-width: 850px) {
   .site-header p { display: none; }
+  .tmdb-status { display: none; }
+  .desktop-download { margin-left: auto; }
   .profile-bar { grid-template-columns: 1fr 1fr; }
   .import-drawer, .profile-drawer { grid-column: 1 / -1; }
   .import-drawer > summary, .profile-drawer > summary { width: 100%; }
@@ -508,7 +513,9 @@ summary { cursor: pointer; }
 
 @media (max-width: 560px) {
   main { width: min(100% - 22px, 1160px); }
-  .site-header { padding-inline: 14px; }
+  .site-header { flex-wrap: wrap; padding: 10px 14px; }
+  .desktop-download { min-height: 32px; padding-inline: 9px; font-size: .62rem; }
+  .account-menu { order: 3; width: 100%; justify-content: flex-end; }
   .account-menu span { display: none; }
   .auth-grid { grid-template-columns: 1fr; }
   .hero { padding-top: 42px; }

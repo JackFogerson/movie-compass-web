@@ -4,6 +4,11 @@ The hosted, multi-account edition of Movie Compass. Each account can create and 
 
 This repository is intentionally separate from `movie-compass`, the downloadable local-first Windows edition. They share recommendation concepts and profile-export compatibility, but have different privacy, storage, and deployment requirements.
 
+The website header links directly to the latest packaged Windows release at
+`movie-compass/releases/latest/download/MovieCompass-Windows.zip`. Tagged
+`desktop-v*` builds in the desktop repository publish that stable asset name,
+so the website link does not need to change for every release.
+
 ## Web foundation included
 
 - Email/password registration and sign-in using Argon2 password hashing.
