@@ -1,0 +1,24 @@
+[Unit]
+Description=Movie Compass web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=moviecompass
+Group=moviecompass
+WorkingDirectory=/opt/movie-compass
+EnvironmentFile=/etc/movie-compass.env
+Environment=PYTHONPATH=/opt/movie-compass/backend:/opt/movie-compass
+ExecStartPre=/opt/movie-compass/.venv/bin/alembic upgrade head
+ExecStart=/opt/movie-compass/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 10000 --workers 1
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+
+# Keep the small free-tier VM responsive. A two-GiB swap file provides a safety
+# net during imports and model loading, but the process remains single-worker.
+MemoryHigh=800M
+
+[Install]
+WantedBy=multi-user.target

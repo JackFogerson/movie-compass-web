@@ -1,8 +1,9 @@
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     email_from: str | None = None
     password_reset_code_minutes: int = 15
+    allow_sqlite_production: bool = False
 
     @property
     def raw_data_dir(self) -> Path:
@@ -45,8 +47,23 @@ def production_configuration_errors(settings: Settings) -> list[str]:
     if settings.app_env.casefold() != "production":
         return []
     errors = []
-    if not settings.database_url.casefold().startswith(("postgresql://", "postgresql+")):
-        errors.append("DATABASE_URL must use persistent PostgreSQL")
+    database_url = settings.database_url.strip()
+    database_is_persistent = database_url.casefold().startswith(("postgresql://", "postgresql+"))
+    if settings.allow_sqlite_production and database_url.casefold().startswith("sqlite"):
+        sqlite_database = make_url(database_url).database
+        database_is_persistent = bool(
+            sqlite_database
+            and sqlite_database != ":memory:"
+            and (
+                Path(sqlite_database).is_absolute()
+                or PurePosixPath(sqlite_database).is_absolute()
+            )
+        )
+    if not database_is_persistent:
+        errors.append(
+            "DATABASE_URL must use PostgreSQL, or an absolute persistent SQLite path with "
+            "ALLOW_SQLITE_PRODUCTION=true"
+        )
     if not settings.web_auth_required:
         errors.append("WEB_AUTH_REQUIRED must be true")
     if not settings.web_cookie_secure:

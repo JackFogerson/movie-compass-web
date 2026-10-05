@@ -21,20 +21,21 @@ so the website link does not need to change for every release.
   sharing grants, and generated personal model data.
 - Fail-closed production configuration checks and browser security headers covering framing,
   content types, permissions, referrers, transport security, and content sources.
-- Separate liveness and readiness checks so hosting sends traffic only after PostgreSQL, the
+- Separate liveness and readiness checks so hosting sends traffic only after the persistent
   recommendation catalog, and TMDB configuration are available.
 - Database-backed profile-import jobs that continue after the upload request, expose private
   progress/results to the initiating account, and remove the temporary ZIP after completion.
 - Multiple profiles per account and account-scoped profile APIs.
 - Ownership checks around profile, recommendation, search, and group endpoints.
-- PostgreSQL persistence for generated recommendation reports and per-profile review policy.
+- Persistent database storage for generated recommendation reports and per-profile review policy.
 - Reserved friendship and profile-sharing tables for the future social movie-night flow.
 - PostgreSQL/Alembic migration for accounts and ownership.
 - Responsive login/create-account interface integrated with the existing application.
-- Docker deployment for an always-running Oracle Cloud VM with PostgreSQL/pgvector and Caddy;
-  the Render blueprint remains an optional sleeping preview host.
+- A lightweight deployment for Google Cloud's always-running `e2-micro` Free Tier VM, using one
+  application worker, persistent SQLite/WAL, systemd, and Caddy. Oracle and Render configurations
+  remain alternatives, but are not the recommended family-beta path.
 
-Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, provide `DATABASE_URL` for persistent PostgreSQL, and keep `TMDB_API_KEY` and `RESEND_API_KEY` in the host's secret manager. Set `EMAIL_FROM` to a sender on a domain verified with the email provider. Website users never enter their own service keys. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never a credential.
+Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, and keep `TMDB_API_KEY` and `RESEND_API_KEY` in the host's protected environment file or secret manager. Set `EMAIL_FROM` to a sender on a domain verified with the email provider. Production normally requires PostgreSQL; the single-VM family beta may explicitly enable an absolute persistent SQLite database with `ALLOW_SQLITE_PRODUCTION=true`. Website users never enter their own service keys. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never a credential.
 
 See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, storage, and deployment plan.
 See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for the exact owner-supplied accounts and secrets

@@ -23,12 +23,12 @@ The website is a multi-account service. The downloadable local edition remains p
 
 ## Persistence
 
-PostgreSQL is authoritative for accounts, profiles, ratings, reviews, mappings, imports,
-generated recommendation reports, and per-profile review-policy decisions. The application
-keeps optional local JSON mirrors for development, but every user-visible saved ranking can be
-restored from PostgreSQL after a container restart. Personal scoring layers are fitted on demand
-from database ratings instead of being required as durable model files. Shared MovieLens/TMDB
-artifacts remain immutable build assets.
+The configured persistent database is authoritative for accounts, profiles, ratings, reviews,
+mappings, imports, generated recommendation reports, and per-profile review-policy decisions.
+The family beta uses one-process SQLite in WAL mode on a Google persistent disk to fit within the
+one-GB free VM. PostgreSQL remains the multi-instance/public-scale target. Personal scoring layers
+are fitted on demand from database ratings instead of being required as durable model files.
+Shared MovieLens/TMDB artifacts remain immutable build assets.
 
 ## Security launch checklist
 
@@ -44,18 +44,21 @@ artifacts remain immutable build assets.
    Move execution from the web process to a dedicated worker before scaling beyond one instance.
 7. Store no Letterboxd ZIP after import; retain only rating-bearing entries and the user's requested review text.
 
-Production startup now fails closed when PostgreSQL, authentication, secure cookies, the session
-secret, TMDB access, password-reset email, session lifetime, or rate-limit values are unsafe. Browser responses also
+Production startup fails closed unless the database is PostgreSQL or the owner explicitly enables
+an absolute persistent SQLite path for the single-VM beta. It also validates authentication,
+secure cookies, the session secret, TMDB access, password-reset email, session lifetime, and rate
+limits. Browser responses also
 include a restrictive content-security policy and related security headers.
 `/health` is a lightweight process-liveness check. Hosting and container orchestration use
 `/ready`, which also verifies the database, bundled recommendation catalog, and TMDB setup.
 
 ## Primary family deployment
 
-- Oracle Cloud Always Free Ampere A1 VM for an always-running Docker host.
-- PostgreSQL/pgvector on a persistent Docker volume on the VM.
+- Google Cloud Free Tier `e2-micro` VM in an eligible US region, which has no scheduled idle sleep.
+- One Uvicorn worker under systemd and SQLite/WAL on standard persistent disk.
 - Caddy for automatic HTTPS and reverse proxying.
-- Daily PostgreSQL dumps copied off the VM to Oracle Object Storage or another backup target.
+- Daily consistent SQLite backups copied off the VM to a separate storage destination.
 
-The repository keeps a Render blueprint as an alternative preview host, but Render Free's idle
-sleep does not meet the desired immediate-access behavior. See `deploy/oracle/README.md`.
+The repository retains Oracle and Render configurations as alternatives. Oracle's abandonment
+language is not acceptable for this owner's primary deployment, and Render Free's idle sleep does
+not meet the immediate-access requirement. See `deploy/google-cloud/README.md`.

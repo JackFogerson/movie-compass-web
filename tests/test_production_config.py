@@ -28,6 +28,29 @@ def test_safe_production_configuration_is_accepted() -> None:
     validate_production_configuration(settings)
 
 
+def test_persistent_sqlite_can_be_explicitly_enabled_for_single_vm_beta() -> None:
+    settings = production_settings(
+        database_url="sqlite+pysqlite:////var/lib/movie-compass/movie-compass.sqlite3",
+        allow_sqlite_production=True,
+    )
+
+    assert production_configuration_errors(settings) == []
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    ["sqlite:///:memory:", "sqlite:///relative.sqlite3"],
+)
+def test_sqlite_production_rejects_nonpersistent_paths(database_url: str) -> None:
+    settings = production_settings(
+        database_url=database_url,
+        allow_sqlite_production=True,
+    )
+
+    errors = production_configuration_errors(settings)
+    assert any("absolute persistent SQLite" in error for error in errors)
+
+
 def test_unsafe_production_configuration_reports_every_problem() -> None:
     settings = production_settings(
         database_url="sqlite:///temporary.sqlite3",
