@@ -34,8 +34,9 @@ artifacts remain immutable build assets.
 
 1. Set a unique `WEB_SESSION_SECRET` and rotate the TMDB key previously used for local development.
 2. Require HTTPS and `WEB_COOKIE_SECURE=true`.
-3. Add email verification and password reset; move preview throttling to a shared store before
-   scaling the web service beyond one instance.
+3. Password reset uses an emailed, rate-limited six-digit code with a short expiry and revokes
+   older sessions after success. Add registration-email verification and move preview throttling
+   to a shared store before scaling the web service beyond one instance.
 4. CSRF tokens protect cookie-authenticated mutations; keep them covered by integration tests.
 5. Account and profile deletion plus profile export are implemented; add the published privacy
    policy and formal retention schedule before a public launch.
@@ -44,7 +45,7 @@ artifacts remain immutable build assets.
 7. Store no Letterboxd ZIP after import; retain only rating-bearing entries and the user's requested review text.
 
 Production startup now fails closed when PostgreSQL, authentication, secure cookies, the session
-secret, TMDB access, session lifetime, or rate-limit values are unsafe. Browser responses also
+secret, TMDB access, password-reset email, session lifetime, or rate-limit values are unsafe. Browser responses also
 include a restrictive content-security policy and related security headers.
 `/health` is a lightweight process-liveness check. Hosting and container orchestration use
 `/ready`, which also verifies the database, bundled recommendation catalog, and TMDB setup.

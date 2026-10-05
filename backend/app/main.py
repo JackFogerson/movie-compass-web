@@ -3,11 +3,12 @@ import csv
 import gzip
 import io
 import json
+import logging
 import re
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from shutil import rmtree
@@ -41,6 +42,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.display_metadata import enrich_display_metadata
+from app.services.email_delivery import EmailDeliveryError, send_password_reset_code
 from app.services.group_recommendations import (
     clear_group_recommendation_cache,
     generate_group_recommendations,
@@ -85,6 +87,7 @@ from ingestion.tmdb.details_cache import load_or_fetch_details
 
 settings = get_settings()
 configure_logging(settings.log_level)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -146,13 +149,13 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(min_length=10, max_length=200)
 
 
-class RecoveryCodeRequest(BaseModel):
-    password: str = Field(min_length=10, max_length=200)
+class PasswordResetCodeRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
 
 
 class PasswordRecoveryRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
-    recovery_code: str = Field(min_length=16, max_length=200)
+    recovery_code: str = Field(pattern=r"^\d{6}$")
     new_password: str = Field(min_length=10, max_length=200)
 
 
@@ -434,7 +437,8 @@ async def protect_cookie_authenticated_mutations(request: Request, call_next):
     if (
         settings.web_auth_required
         and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
-        and request.url.path not in {"/auth/login", "/auth/register", "/auth/recover"}
+        and request.url.path
+        not in {"/auth/login", "/auth/register", "/auth/recover", "/auth/recover/request"}
         and request.cookies.get(COOKIE_NAME)
     ):
         cookie_token = request.cookies.get(CSRF_COOKIE_NAME, "")
@@ -631,32 +635,49 @@ def change_account_password(
         return response
 
 
-@app.post("/auth/recovery-code")
-def create_account_recovery_code(
-    http_request: Request, request: RecoveryCodeRequest
+@app.post("/auth/recover/request", status_code=202)
+def request_account_password_reset(
+    http_request: Request, request: PasswordResetCodeRequest
 ) -> dict:
-    """Replace and return the account's one-time recovery code."""
-    identity = read_session_token(
-        settings.web_session_secret,
-        http_request.cookies.get(COOKIE_NAME, ""),
-        settings.web_session_days * 86_400,
+    """Email a short-lived reset code without revealing whether the account exists."""
+    if not (settings.resend_api_key or "").strip() or not (settings.email_from or "").strip():
+        raise HTTPException(status_code=503, detail="Password-reset email is not configured")
+    email = normalize_email(request.email)
+    decision = login_rate_limiter.consume(
+        f"recover-request:{_client_ip(http_request)}:{email}",
+        limit=settings.web_login_attempts,
+        window_seconds=settings.web_login_window_seconds,
     )
-    if identity is None:
-        raise HTTPException(status_code=401, detail="Sign in required")
+    _enforce_rate_limit(decision, "Too many reset requests. Please wait and try again.")
     with SessionLocal() as session:
-        account = session.get(Account, identity.account_id)
-        if (
-            account is None
-            or account.email != identity.email
-            or int(account.session_version or 1) != identity.session_version
-        ):
-            raise HTTPException(status_code=401, detail="Session is no longer valid")
-        if not verify_password(request.password, account.password_hash):
-            raise HTTPException(status_code=401, detail="Password is incorrect")
-        recovery_code = secrets.token_urlsafe(24)
+        account = session.scalar(select(Account).where(Account.email == email))
+        if account is None:
+            return {"accepted": True}
+        recovery_code = f"{secrets.randbelow(1_000_000):06d}"
         account.recovery_code_hash = hash_password(recovery_code)
+        account.recovery_code_expires_at = datetime.now(UTC) + timedelta(
+            minutes=settings.password_reset_code_minutes
+        )
         session.commit()
-        return {"recovery_code": recovery_code}
+        try:
+            send_password_reset_code(
+                api_key=settings.resend_api_key or "",
+                sender=settings.email_from or "",
+                recipient=account.email,
+                display_name=account.display_name,
+                code=recovery_code,
+                minutes=settings.password_reset_code_minutes,
+            )
+        except EmailDeliveryError as error:
+            account.recovery_code_hash = None
+            account.recovery_code_expires_at = None
+            session.commit()
+            logger.warning(
+                "Password-reset email delivery failed for account %s: %s",
+                account.id,
+                error,
+            )
+    return {"accepted": True}
 
 
 @app.post("/auth/recover")
@@ -673,14 +694,20 @@ def recover_account_password(
     _enforce_rate_limit(decision, "Too many recovery attempts. Please wait and try again.")
     with SessionLocal() as session:
         account = session.scalar(select(Account).where(Account.email == email))
+        expiry = account.recovery_code_expires_at if account is not None else None
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
         if (
             account is None
             or not account.recovery_code_hash
+            or expiry is None
+            or expiry <= datetime.now(UTC)
             or not verify_password(request.recovery_code, account.recovery_code_hash)
         ):
             raise HTTPException(status_code=401, detail="Recovery information is incorrect")
         account.password_hash = hash_password(request.new_password)
         account.recovery_code_hash = None
+        account.recovery_code_expires_at = None
         account.session_version = int(account.session_version or 1) + 1
         session.commit()
         response = JSONResponse(_account_summary(account))

@@ -317,7 +317,15 @@ def test_recovery_code_resets_password_once_and_revokes_old_sessions(monkeypatch
     monkeypatch.setattr(main_module, "SessionLocal", session_factory)
     settings = get_settings()
     monkeypatch.setattr(settings, "web_auth_required", True)
+    monkeypatch.setattr(settings, "resend_api_key", "resend-test-key")
+    monkeypatch.setattr(settings, "email_from", "Movie Compass <noreply@example.com>")
     main_module.login_rate_limiter.clear()
+    delivered = {}
+
+    def capture_code(**message) -> None:
+        delivered.update(message)
+
+    monkeypatch.setattr(main_module, "send_password_reset_code", capture_code)
 
     original = {
         "email": "recover-me@example.com",
@@ -330,14 +338,14 @@ def test_recovery_code_resets_password_once_and_revokes_old_sessions(monkeypatch
     older_session = TestClient(app)
     assert older_session.post("/auth/login", json=original).status_code == 200
 
-    created = owner.post(
-        "/auth/recovery-code",
-        headers=_csrf_headers(owner),
-        json={"password": original["password"]},
+    requested = TestClient(app).post(
+        "/auth/recover/request",
+        json={"email": original["email"]},
     )
-    assert created.status_code == 200
-    code = created.json()["recovery_code"]
-    assert len(code) >= 24
+    assert requested.status_code == 202
+    assert requested.json() == {"accepted": True}
+    code = delivered["code"]
+    assert len(code) == 6 and code.isdigit()
 
     recovered = TestClient(app)
     reset = recovered.post(

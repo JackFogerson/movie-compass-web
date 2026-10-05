@@ -36,10 +36,13 @@
       <p id="auth-status" class="status-message" aria-live="polite"></p>
       <details class="auth-recovery">
         <summary>Forgot your password?</summary>
-        <form id="recover-account-form" class="auth-form recovery-form">
-          <p>Use the one-time recovery code you previously downloaded from Account settings.</p>
+        <form id="request-reset-code-form" class="auth-form recovery-form">
+          <p>Enter your account email and we will send a six-digit code that expires in 15 minutes.</p>
           <label>Email<input id="recovery-email" type="email" autocomplete="email" required /></label>
-          <label>Recovery code<input id="recovery-code" autocomplete="off" minlength="16" required /></label>
+          <button type="submit">Email me a code</button>
+        </form>
+        <form id="recover-account-form" class="auth-form recovery-form">
+          <label>Six-digit code<input id="recovery-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required /></label>
           <label>New password<input id="recovery-new-password" type="password" autocomplete="new-password" minlength="10" required /></label>
           <button type="submit">Reset password</button>
         </form>
@@ -266,16 +269,6 @@
         <div class="dialog-actions"><button type="submit">Change password</button></div>
       </form>
       <p id="change-password-status" class="status-message" aria-live="polite"></p>
-      <div class="account-privacy-copy">
-        <h2>Recovery code</h2>
-        <p>Download a one-time code now and store it somewhere safe. Creating another code replaces the previous one.</p>
-      </div>
-      <form id="create-recovery-code-form" class="account-delete-form">
-        <label>Current password<input id="recovery-code-password" type="password" autocomplete="current-password" minlength="10" required /></label>
-        <div class="dialog-actions"><button type="submit">Create and download recovery code</button></div>
-      </form>
-      <code id="recovery-code-output" class="recovery-code-output" hidden></code>
-      <p id="create-recovery-code-status" class="status-message" aria-live="polite"></p>
       <div class="account-privacy-copy">
         <h2>Delete this account</h2>
         <p>This permanently removes every profile you own, including ratings, reviews, imports, generated model data, friend connections, and profile-sharing permissions. Movie catalog data shared by the service is not personal and is retained.</p>

@@ -15,7 +15,8 @@ so the website link does not need to change for every release.
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Double-submit CSRF protection for every cookie-authenticated mutation.
 - Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
-- Password changes and downloadable one-time recovery codes; a successful recovery revokes older sessions.
+- Password changes and emailed six-digit reset codes; codes expire after 15 minutes and a
+  successful recovery revokes older sessions.
 - Password-confirmed account deletion covering owned profiles, ratings, reviews, friendships,
   sharing grants, and generated personal model data.
 - Fail-closed production configuration checks and browser security headers covering framing,
@@ -32,9 +33,11 @@ so the website link does not need to change for every release.
 - Responsive login/create-account interface integrated with the existing application.
 - Docker deployment and Render blueprint; PostgreSQL remains external and persistent.
 
-Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, provide `DATABASE_URL` for persistent PostgreSQL, and keep one shared `TMDB_API_KEY` in the host's secret manager. Website users never enter their own TMDB key: every TMDB request runs on the server with this shared credential. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never the credential itself.
+Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, provide `DATABASE_URL` for persistent PostgreSQL, and keep `TMDB_API_KEY` and `RESEND_API_KEY` in the host's secret manager. Set `EMAIL_FROM` to a sender on a domain verified with the email provider. Website users never enter their own service keys. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never a credential.
 
 See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, storage, and deployment plan.
+See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for the exact owner-supplied accounts and secrets
+required to put the site online.
 
 ## What works now
 
@@ -47,9 +50,8 @@ See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, stor
 - Audience-reach filters for blockbuster, popular, cult classic, under-the-radar, and unknown/emerging titles. Reach is kept separate from predicted quality.
 - Per-profile Letterboxd ZIP upload, local-first catalog matching, and on-demand model fitting. Only the latest review per film is used, while rewatch counts are retained. Imports return structured JSON even when TMDB is temporarily unreachable, and unmapped films remain safely pending.
 
-Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, background job
-processing, email verification/password recovery, distributed throttling, and production
-deployment are not yet complete.
+Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, registration-email
+verification, distributed throttling, and production deployment are not yet complete.
 
 ## Fast setup on another Windows laptop
 

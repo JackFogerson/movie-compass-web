@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     web_login_attempts: int = 10
     web_login_window_seconds: int = 900
     web_profile_imports_per_hour: int = 10
+    resend_api_key: str | None = None
+    email_from: str | None = None
+    password_reset_code_minutes: int = 15
 
     @property
     def raw_data_dir(self) -> Path:
@@ -56,6 +59,12 @@ def production_configuration_errors(settings: Settings) -> list[str]:
         errors.append("WEB_SESSION_SECRET must be a unique secret of at least 32 characters")
     if not (settings.tmdb_api_key or "").strip():
         errors.append("TMDB_API_KEY must be configured")
+    if not (settings.resend_api_key or "").strip():
+        errors.append("RESEND_API_KEY must be configured")
+    if not (settings.email_from or "").strip():
+        errors.append("EMAIL_FROM must be configured")
+    if not 5 <= settings.password_reset_code_minutes <= 60:
+        errors.append("PASSWORD_RESET_CODE_MINUTES must be between 5 and 60")
     if not 1 <= settings.web_session_days <= 90:
         errors.append("WEB_SESSION_DAYS must be between 1 and 90")
     if min(

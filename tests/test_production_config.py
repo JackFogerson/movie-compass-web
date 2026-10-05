@@ -11,6 +11,8 @@ def production_settings(**overrides) -> Settings:
         "app_env": "production",
         "database_url": "postgresql+psycopg://movie:secret@database/movie_compass",
         "tmdb_api_key": "tmdb-test-key",
+        "resend_api_key": "resend-test-key",
+        "email_from": "Movie Compass <noreply@example.com>",
         "web_session_secret": "a-unique-production-secret-with-32-characters",
         "web_cookie_secure": True,
         "web_auth_required": True,
@@ -35,11 +37,14 @@ def test_unsafe_production_configuration_reports_every_problem() -> None:
         web_auth_required=False,
         web_session_days=365,
         web_login_attempts=0,
+        resend_api_key="",
+        email_from="",
+        password_reset_code_minutes=0,
     )
 
     errors = production_configuration_errors(settings)
 
-    assert len(errors) == 7
+    assert len(errors) == 10
     with pytest.raises(RuntimeError, match="Unsafe production configuration"):
         validate_production_configuration(settings)
 

@@ -69,7 +69,6 @@ button, input, select { font: inherit; }
 .account-delete-form { display: grid; gap: 13px; padding: 18px 22px 8px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .account-dialog .status-message { padding: 0 22px 18px; }
-.recovery-code-output { display: block; margin: 4px 22px 12px; padding: 11px; overflow-wrap: anywhere; color: var(--gold); border: 1px dashed var(--gold-dark); border-radius: 8px; background: #090c0f; user-select: all; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 760; }
 .brand-mark {
   display: grid;

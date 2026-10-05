@@ -48,6 +48,10 @@ def main() -> None:
                     "NOT NULL DEFAULT 1"
                 )
             )
+        if "recovery_code_expires_at" not in account_columns:
+            connection.execute(
+                text("ALTER TABLE accounts ADD COLUMN recovery_code_expires_at DATETIME")
+            )
     print(f"Initialized local database: {settings.database_url}")
 
 

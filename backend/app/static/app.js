@@ -26,6 +26,7 @@ window.fetch = (input, options = {}) => {
 
 const loginForm = document.querySelector("#login-form");
 const registerForm = document.querySelector("#register-form");
+const requestResetCodeForm = document.querySelector("#request-reset-code-form");
 const recoverAccountForm = document.querySelector("#recover-account-form");
 const recoveryStatus = document.querySelector("#recovery-status");
 const accountMenu = document.querySelector("#account-menu");
@@ -36,9 +37,6 @@ const accountDialog = document.querySelector("#account-dialog");
 const closeAccountDialogButton = document.querySelector("#close-account-dialog");
 const changePasswordForm = document.querySelector("#change-password-form");
 const changePasswordStatus = document.querySelector("#change-password-status");
-const createRecoveryCodeForm = document.querySelector("#create-recovery-code-form");
-const createRecoveryCodeStatus = document.querySelector("#create-recovery-code-status");
-const recoveryCodeOutput = document.querySelector("#recovery-code-output");
 const deleteAccountForm = document.querySelector("#delete-account-form");
 const deleteAccountStatus = document.querySelector("#delete-account-status");
 const yearMinInput = document.querySelector("#year-min");
@@ -148,7 +146,6 @@ profileManagementHost.append(profileEditor);
 profileEditor.open = true;
 let catalogStatus = null;
 let savedProfiles = [];
-let signedInAccount = null;
 let sharedGroupProfiles = [];
 let selectedManualMovie = null;
 const adultPosterPreferenceKey = "movie-compass-show-adult-posters";
@@ -196,7 +193,6 @@ async function submitAccountForm(path, payload) {
 }
 
 function showSignedInAccount(account) {
-  signedInAccount = account;
   accountName.textContent = account.display_name;
   accountMenu.hidden = false;
   if (authDialog.open) authDialog.close();
@@ -1573,6 +1569,27 @@ registerForm.addEventListener("submit", async (event) => {
     authStatus.textContent = error.message;
   }
 });
+requestResetCodeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submitButton = requestResetCodeForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  recoveryStatus.textContent = "Sending code…";
+  try {
+    const response = await fetch("/auth/recover/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: document.querySelector("#recovery-email").value }),
+    });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Reset code could not be sent");
+    recoveryStatus.textContent = "If that email has an account, a six-digit code is on its way.";
+    document.querySelector("#recovery-code").focus();
+  } catch (error) {
+    recoveryStatus.textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
 recoverAccountForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   recoveryStatus.textContent = "Resetting password…";
@@ -1597,10 +1614,6 @@ signOutButton.addEventListener("click", async () => {
 manageAccountButton.addEventListener("click", () => {
   changePasswordForm.reset();
   changePasswordStatus.textContent = "";
-  createRecoveryCodeForm.reset();
-  createRecoveryCodeStatus.textContent = "";
-  recoveryCodeOutput.hidden = true;
-  recoveryCodeOutput.textContent = "";
   deleteAccountForm.reset();
   deleteAccountStatus.textContent = "";
   accountDialog.showModal();
@@ -1630,41 +1643,6 @@ changePasswordForm.addEventListener("submit", async (event) => {
     changePasswordStatus.textContent = "Password changed successfully.";
   } catch (error) {
     changePasswordStatus.textContent = error.message;
-  } finally {
-    submitButton.disabled = false;
-  }
-});
-createRecoveryCodeForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const submitButton = createRecoveryCodeForm.querySelector('button[type="submit"]');
-  submitButton.disabled = true;
-  createRecoveryCodeStatus.textContent = "Creating recovery code…";
-  recoveryCodeOutput.hidden = true;
-  try {
-    const response = await fetch("/auth/recovery-code", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        password: document.querySelector("#recovery-code-password").value,
-      }),
-    });
-    const result = await responseJson(response);
-    if (!response.ok) throw new Error(result.detail || "Recovery code could not be created");
-    recoveryCodeOutput.textContent = result.recovery_code;
-    recoveryCodeOutput.hidden = false;
-    const file = new Blob(
-      [`Movie Compass recovery code\n\nEmail: ${signedInAccount?.email || ""}\nCode: ${result.recovery_code}\n\nThis code works once. Store it privately.\n`],
-      { type: "text/plain" },
-    );
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(file);
-    link.download = "movie-compass-recovery-code.txt";
-    link.click();
-    URL.revokeObjectURL(link.href);
-    createRecoveryCodeForm.reset();
-    createRecoveryCodeStatus.textContent = "Recovery code downloaded. Keep it somewhere private.";
-  } catch (error) {
-    createRecoveryCodeStatus.textContent = error.message;
   } finally {
     submitButton.disabled = false;
   }
