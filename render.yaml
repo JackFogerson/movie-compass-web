@@ -11,10 +11,18 @@ services:
         sync: false
       - key: TMDB_API_KEY
         sync: false
-      - key: RESEND_API_KEY
+      - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
-      - key: EMAIL_FROM
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
         sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_AUTH_ENABLED
+        value: "true"
+      - key: PASSWORD_AUTH_ENABLED
+        value: "false"
+      - key: REGISTRATION_EMAIL_VERIFICATION
+        value: "false"
       - key: WEB_SESSION_SECRET
         generateValue: true
       - key: WEB_COOKIE_SECURE

@@ -29,6 +29,21 @@ def test_safe_production_configuration_is_accepted() -> None:
     validate_production_configuration(settings)
 
 
+def test_google_only_production_needs_no_email_provider_or_domain() -> None:
+    settings = production_settings(
+        password_auth_enabled=False,
+        registration_email_verification=False,
+        resend_api_key="",
+        email_from="",
+        google_auth_enabled=True,
+        google_oauth_client_id="google-client-id",
+        google_oauth_client_secret="google-client-secret",
+        google_oauth_redirect_uri="https://movie-compass-web.onrender.com/auth/google/callback",
+    )
+
+    assert production_configuration_errors(settings) == []
+
+
 def test_persistent_sqlite_can_be_explicitly_enabled_for_single_vm_beta() -> None:
     settings = production_settings(
         database_url="sqlite+pysqlite:////var/lib/movie-compass/movie-compass.sqlite3",

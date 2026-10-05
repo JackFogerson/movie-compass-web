@@ -11,13 +11,12 @@ so the website link does not need to change for every release.
 
 ## Web foundation included
 
-- Email/password registration and sign-in using Argon2 password hashing; production registration
-  requires a short-lived six-digit email verification code.
+- Google OpenID Connect for no-domain public sign-in, plus optional email/password registration
+  using Argon2 and short-lived verification codes for deployments that configure a mail domain.
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Double-submit CSRF protection for every cookie-authenticated mutation.
 - Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
-- Password changes and emailed six-digit reset codes; codes expire after 15 minutes and a
-  successful recovery revokes older sessions.
+- Optional password changes and emailed six-digit reset codes; Google-only accounts need neither.
 - Password-confirmed account deletion covering owned profiles, ratings, reviews, friendships,
   sharing grants, and generated personal model data.
 - Fail-closed production configuration checks and browser security headers covering framing,
@@ -32,11 +31,18 @@ so the website link does not need to change for every release.
 - Reserved friendship and profile-sharing tables for the future social movie-night flow.
 - PostgreSQL/Alembic migration for accounts and ownership.
 - Responsive login/create-account interface integrated with the existing application.
-- A lightweight deployment for Google Cloud's always-running `e2-micro` Free Tier VM, using one
-  application worker, persistent SQLite/WAL, systemd, external IPv6, and Cloudflare Tunnel. Oracle and Render configurations
-  remain alternatives, but are not the recommended family-beta path.
+- A no-card public-beta deployment using a free sleeping Render web service, free Neon PostgreSQL,
+  Render's included HTTPS hostname, and Google sign-in. See `deploy/render-neon/README.md`.
+  Google Cloud and Oracle remain documented alternatives, but their account or billing
+  requirements do not fit the primary goal.
 
-Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, and keep `TMDB_API_KEY` and `RESEND_API_KEY` in the host's protected environment file or secret manager. Set `EMAIL_FROM` to a sender on a domain verified with the email provider. Production normally requires PostgreSQL; the single-VM family beta may explicitly enable an absolute persistent SQLite database with `ALLOW_SQLITE_PRODUCTION=true`. Website users never enter their own service keys. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never a credential.
+Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set
+`WEB_COOKIE_SECURE=true`, and keep TMDB and Google OAuth credentials in the host's secret manager.
+The recommended public deployment disables password authentication, so Resend and a custom mail
+domain are not required. Production normally requires PostgreSQL; the single-VM family beta may
+explicitly enable an absolute persistent SQLite database with `ALLOW_SQLITE_PRODUCTION=true`.
+Website users never enter service keys. Never commit those values. The public `/health` endpoint
+reports only `tmdb: configured` or `tmdb: missing`, never a credential.
 
 See [WEB_ARCHITECTURE.md](WEB_ARCHITECTURE.md) for the account, friendship, storage, and deployment plan.
 See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for the exact owner-supplied accounts and secrets

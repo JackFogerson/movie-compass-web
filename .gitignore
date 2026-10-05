@@ -1,4 +1,5 @@
 .env
+logs-web-dev-*.log
 .venv/
 __pycache__/
 *.py[cod]

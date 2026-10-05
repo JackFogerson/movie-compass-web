@@ -54,12 +54,10 @@ include a restrictive content-security policy and related security headers.
 
 ## Primary family deployment
 
-- Google Cloud Free Tier `e2-micro` VM in an eligible US region, which has no scheduled idle sleep.
-- One Uvicorn worker under systemd and SQLite/WAL on standard persistent disk.
-- Free external IPv6 plus an outbound-only Cloudflare Tunnel for public HTTPS, avoiding Google's
-  paid always-attached external IPv4 address.
-- Daily consistent SQLite backups copied off the VM to a separate storage destination.
-
-The repository retains Oracle and Render configurations as alternatives. Oracle's abandonment
-language is not acceptable for this owner's primary deployment, and Render Free's idle sleep does
-not meet the immediate-access requirement. See `deploy/google-cloud/README.md`.
+- Render Free runs one Docker/Uvicorn worker and supplies the public HTTPS hostname. Its expected
+  cold start after 15 idle minutes is accepted in exchange for requiring no payment card.
+- Neon Free provides persistent PostgreSQL independently from Render's disposable filesystem.
+- Google OpenID Connect signs users in without stored passwords, verification email, Resend, a
+  purchased domain, or DNS configuration.
+- The repository retains Google Cloud and Oracle deployment files as alternatives, but they are
+  not the recommended no-card route. See `deploy/render-neon/README.md`.

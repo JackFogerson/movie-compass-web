@@ -1,11 +1,12 @@
 from importlib import import_module
+from urllib.parse import parse_qs, urlparse
 
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import Account, User
 from app.main import app
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -111,6 +112,64 @@ def test_production_registration_requires_emailed_code(monkeypatch) -> None:
     assert verified.status_code == 200
     assert verified.json()["email_verified"] is True
     assert client.get("/profiles").status_code == 200
+
+
+def test_google_sign_in_creates_passwordless_verified_account(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+    monkeypatch.setattr(settings, "google_auth_enabled", True)
+    monkeypatch.setattr(settings, "google_oauth_client_id", "google-client-id")
+    monkeypatch.setattr(settings, "google_oauth_client_secret", "google-client-secret")
+    monkeypatch.setattr(
+        settings,
+        "google_oauth_redirect_uri",
+        "http://testserver/auth/google/callback",
+    )
+
+    captured = {}
+
+    async def fake_exchange(**arguments):
+        captured.update(arguments)
+        return {
+            "sub": "google-subject-123",
+            "email": "Viewer@Example.com",
+            "email_verified": True,
+            "name": "Film Viewer",
+        }
+
+    monkeypatch.setattr(main_module, "exchange_and_verify", fake_exchange)
+    client = TestClient(app)
+    started = client.get("/auth/google/start", follow_redirects=False)
+    assert started.status_code == 302
+    query = parse_qs(urlparse(started.headers["location"]).query)
+    callback = client.get(
+        "/auth/google/callback",
+        params={"code": "authorization-code", "state": query["state"][0]},
+        follow_redirects=False,
+    )
+
+    assert callback.status_code == 302
+    assert callback.headers["location"] == "/"
+    assert captured["code"] == "authorization-code"
+    assert captured["expected_nonce"] == query["nonce"][0]
+    account = client.get("/auth/me").json()
+    assert account["email"] == "viewer@example.com"
+    assert account["email_verified"] is True
+    assert account["password_login_enabled"] is False
+    assert account["google_connected"] is True
+
+    with session_factory() as session:
+        stored = session.scalar(select(Account).where(Account.email == "viewer@example.com"))
+        assert stored.google_subject == "google-subject-123"
 
 
 def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:

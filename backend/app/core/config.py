@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     email_from: str | None = None
     password_reset_code_minutes: int = 15
     registration_email_verification: bool = False
+    password_auth_enabled: bool = True
+    google_auth_enabled: bool = False
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str | None = None
     allow_sqlite_production: bool = False
 
     @property
@@ -76,12 +81,23 @@ def production_configuration_errors(settings: Settings) -> list[str]:
         errors.append("WEB_SESSION_SECRET must be a unique secret of at least 32 characters")
     if not (settings.tmdb_api_key or "").strip():
         errors.append("TMDB_API_KEY must be configured")
-    if not (settings.resend_api_key or "").strip():
-        errors.append("RESEND_API_KEY must be configured")
-    if not (settings.email_from or "").strip():
-        errors.append("EMAIL_FROM must be configured")
-    if not settings.registration_email_verification:
-        errors.append("REGISTRATION_EMAIL_VERIFICATION must be true")
+    if not settings.password_auth_enabled and not settings.google_auth_enabled:
+        errors.append("At least one production sign-in method must be enabled")
+    if settings.password_auth_enabled:
+        if not (settings.resend_api_key or "").strip():
+            errors.append("RESEND_API_KEY must be configured when password sign-in is enabled")
+        if not (settings.email_from or "").strip():
+            errors.append("EMAIL_FROM must be configured when password sign-in is enabled")
+        if not settings.registration_email_verification:
+            errors.append("REGISTRATION_EMAIL_VERIFICATION must be true for password sign-in")
+    if settings.google_auth_enabled:
+        if not (settings.google_oauth_client_id or "").strip():
+            errors.append("GOOGLE_OAUTH_CLIENT_ID must be configured")
+        if not (settings.google_oauth_client_secret or "").strip():
+            errors.append("GOOGLE_OAUTH_CLIENT_SECRET must be configured")
+        redirect_uri = (settings.google_oauth_redirect_uri or "").strip()
+        if not redirect_uri.startswith("https://"):
+            errors.append("GOOGLE_OAUTH_REDIRECT_URI must be an HTTPS URL")
     if not 5 <= settings.password_reset_code_minutes <= 60:
         errors.append("PASSWORD_RESET_CODE_MINUTES must be between 5 and 60")
     if not 1 <= settings.web_session_days <= 90:

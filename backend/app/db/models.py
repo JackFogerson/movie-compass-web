@@ -63,6 +63,8 @@ class Account(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(500))
+    password_login_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    google_subject: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     recovery_code_hash: Mapped[str | None] = mapped_column(String(500))
     recovery_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

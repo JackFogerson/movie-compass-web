@@ -2,45 +2,44 @@
 
 ## What the owner needs to provide
 
-1. **Google Cloud account/project:** create a billing account, then create one Free Tier-eligible
-   `e2-micro` Ubuntu VM in `us-west1`, `us-central1`, or `us-east1` with a 30 GB standard persistent
-   disk and external IPv6. Do not leave external IPv4 attached. Enable billing budgets/alerts. The billing account remains necessary
-   even when usage stays inside the ongoing monthly Free Tier allowance.
-2. **Public domain and tunnel:** put the domain on Cloudflare's free DNS plan, create a Cloudflare
-   Tunnel, and route the chosen public hostname to `http://127.0.0.1:10000`. Cloudflare supplies
-   public HTTPS without a paid Google external IPv4 address.
-3. **Resend DNS records:** at the domain's DNS provider, copy every record exactly as displayed by
-   Resend. Use the host/name without duplicating the root domain, leave TTL at Auto/default, and
-   make email CNAMEs DNS-only if the DNS provider offers HTTP proxying. Then click **Verify DNS
-   Records** in Resend.
-4. **Server-only configuration:** put `TMDB_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, the Cloudflare
-   tunnel token, and a newly generated `WEB_SESSION_SECRET` only in `/etc/movie-compass.env` on the
-   VM. Never commit them.
-5. **Administration:** keep inbound HTTP/HTTPS closed and use Google IAP for administrator SSH.
-6. **Product contact:** choose the support/privacy contact email shown to users.
+1. **Neon account:** create a free project and copy its pooled PostgreSQL connection string. Keep
+   `sslmode=require`. The recommended database does not require a card and does not expire after
+   30 days.
+2. **Render account:** connect the `movie-compass-web` GitHub repository as a Blueprint. Render
+   supplies the public `*.onrender.com` HTTPS hostname; no domain purchase or DNS work is needed.
+3. **Google OAuth client:** after Render assigns the hostname, create a Web application OAuth
+   client and authorize this exact callback:
+   `https://YOUR-RENDER-HOST.onrender.com/auth/google/callback`.
+4. **Server-only secrets:** enter the Neon `DATABASE_URL`, `TMDB_API_KEY`, Google client ID, Google
+   client secret, and exact Google callback URL in Render. Never commit those values.
+5. **Google test users:** while the OAuth consent screen remains in testing, list each friend or
+   family member who should be allowed to sign in.
+6. **Product contact:** choose the support/privacy contact shown to users before a broader release.
+
+The detailed click-by-click instructions are in `deploy/render-neon/README.md`.
 
 ## What Codex can finish after those values exist
 
-1. Install the lightweight systemd/Cloudflare Tunnel deployment using
-   `deploy/google-cloud/README.md`.
-2. Run the SQLite schema initializer and verify SQLite/WAL persistence across service and VM
-   restarts. The PostgreSQL Alembic chain is not used on the one-VM SQLite deployment.
-3. Verify liveness/readiness, TMDB connectivity, HTTPS, cookies, and security headers.
-4. Test registration and a real six-digit password-reset email end to end.
-5. Import/export/restore a disposable profile and verify rankings, search, and shared movie night.
-6. Schedule consistent daily database backups, copy them off the VM, and test restoration.
-7. Verify the Windows app download and complete the family-beta release audit.
+1. Confirm the Render Blueprint and Neon connection settings without exposing any secret.
+2. Verify Alembic migrations, readiness, TMDB connectivity, HTTPS cookies, and security headers.
+3. Test Google sign-in in a private window with one allowed test account.
+4. Import/export/restore a disposable profile and verify rankings, search, and shared movie night.
+5. Test cold-start behavior after at least 20 idle minutes and confirm profiles remain in Neon.
+6. Verify the Windows app download and complete the family-beta release audit.
 
 ## Free-tier boundaries
 
-- The Google Free Tier currently covers one non-preemptible `e2-micro` VM for the full month in
-  eligible US regions, 30 GB-months standard persistent disk, and 1 GB outbound transfer from
-  North America. It has no published end date, but limits can change with notice.
-- The VM does not sleep for inactivity. Planned maintenance or faults can still cause downtime;
-  systemd restarts the application after a reboot.
-- Google charges for an attached external IPv4 after the first account-wide hour each month. This
-  deployment uses free external IPv6 plus Cloudflare Tunnel and removes setup IPv4 immediately.
-- Free Tier is a usage allowance attached to a billing account, not an absolute spending cap.
-  Budgets alert but do not cap spending, so do not create resources outside the listed allowance.
-- The one-GB VM is intended for a low-concurrency family/friends beta. Move to PostgreSQL and a
-  larger host before opening the service to substantial public traffic.
+- Render's free web service sleeps after 15 minutes without traffic. The first visit after sleep
+  normally takes about a minute; later requests are immediate while the service stays awake.
+- The free web service receives 750 instance-hours per month. One low-traffic service normally
+  fits because sleeping time does not consume those hours.
+- The Render container filesystem is disposable. Personal data must remain in Neon, not local
+  files inside the container.
+- Do not create a Render Free PostgreSQL database for this project; that product expires after 30
+  days. Neon is the durable free database in this plan.
+- Google sign-in replaces verification and reset emails. Resend and a custom sending domain are
+  not required.
+
+Production startup fails closed unless authentication, secure cookies, a strong session secret,
+TMDB, and a persistent database are configured. `/health` is process liveness; `/ready` also checks
+the database and bundled recommendation catalog.

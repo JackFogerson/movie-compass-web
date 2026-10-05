@@ -36,7 +36,16 @@ def main() -> None:
     engine = create_engine(settings.database_url)
     Base.metadata.create_all(engine)
     account_columns = {column["name"] for column in inspect(engine).get_columns("accounts")}
+    user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
     with engine.begin() as connection:
+        if "owner_account_id" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN owner_account_id BIGINT"))
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_users_owner_account_id "
+                    "ON users (owner_account_id)"
+                )
+            )
         if "recovery_code_hash" not in account_columns:
             connection.execute(
                 text("ALTER TABLE accounts ADD COLUMN recovery_code_hash VARCHAR(500)")
@@ -59,6 +68,21 @@ def main() -> None:
         if "verification_code_expires_at" not in account_columns:
             connection.execute(
                 text("ALTER TABLE accounts ADD COLUMN verification_code_expires_at DATETIME")
+            )
+        if "password_login_enabled" not in account_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE accounts ADD COLUMN password_login_enabled "
+                    "BOOLEAN NOT NULL DEFAULT 1"
+                )
+            )
+        if "google_subject" not in account_columns:
+            connection.execute(text("ALTER TABLE accounts ADD COLUMN google_subject VARCHAR(255)"))
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_accounts_google_subject "
+                    "ON accounts (google_subject)"
+                )
             )
     print(f"Initialized local database: {settings.database_url}")
 

@@ -2,6 +2,9 @@ let user = document.body.dataset.user;
 const tmdbStatus = document.querySelector("#tmdb-status");
 const authDialog = document.querySelector("#auth-dialog");
 const authStatus = document.querySelector("#auth-status");
+const googleAuthSection = document.querySelector("#google-auth-section");
+const passwordAuthSection = document.querySelector("#password-auth-section");
+const authRecovery = document.querySelector("#auth-recovery");
 const browserFetch = window.fetch.bind(window);
 
 function cookieValue(name) {
@@ -40,9 +43,12 @@ const signOutButton = document.querySelector("#sign-out");
 const accountDialog = document.querySelector("#account-dialog");
 const closeAccountDialogButton = document.querySelector("#close-account-dialog");
 const changePasswordForm = document.querySelector("#change-password-form");
+const changePasswordCopy = document.querySelector("#change-password-copy");
 const changePasswordStatus = document.querySelector("#change-password-status");
 const deleteAccountForm = document.querySelector("#delete-account-form");
 const deleteAccountStatus = document.querySelector("#delete-account-status");
+const deletePasswordLabel = document.querySelector("#delete-password-label");
+const deleteAccountPassword = document.querySelector("#delete-account-password");
 const yearMinInput = document.querySelector("#year-min");
 const yearMaxInput = document.querySelector("#year-max");
 const limitInput = document.querySelector("#limit");
@@ -152,6 +158,7 @@ let catalogStatus = null;
 let savedProfiles = [];
 let sharedGroupProfiles = [];
 let selectedManualMovie = null;
+let signedInAccount = null;
 const adultPosterPreferenceKey = "movie-compass-show-adult-posters";
 
 function applyAdultPosterPreference(show) {
@@ -197,9 +204,34 @@ async function submitAccountForm(path, payload) {
 }
 
 function showSignedInAccount(account) {
+  signedInAccount = account;
   accountName.textContent = account.display_name;
   accountMenu.hidden = false;
+  const passwordEnabled = account.password_login_enabled !== false;
+  changePasswordCopy.hidden = !passwordEnabled;
+  changePasswordForm.hidden = !passwordEnabled;
+  changePasswordStatus.hidden = !passwordEnabled;
+  deletePasswordLabel.hidden = !passwordEnabled;
+  deleteAccountPassword.required = passwordEnabled;
   if (authDialog.open) authDialog.close();
+}
+
+async function configureAuthentication() {
+  try {
+    const response = await fetch("/auth/config");
+    const config = await responseJson(response);
+    if (!response.ok) return;
+    googleAuthSection.hidden = !config.google_enabled;
+    passwordAuthSection.hidden = !config.password_enabled;
+    authRecovery.hidden = !config.password_enabled;
+    const error = new URLSearchParams(location.search).get("auth_error");
+    if (error === "google") {
+      authStatus.textContent = "Google sign-in could not be completed. Please try again.";
+      history.replaceState(null, "", `${location.pathname}${location.hash}`);
+    }
+  } catch (_error) {
+    // The normal account request below will show a useful error if the server is unavailable.
+  }
 }
 
 async function requireAccount() {
@@ -1705,7 +1737,9 @@ deleteAccountForm.addEventListener("submit", async (event) => {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        password: document.querySelector("#delete-account-password").value,
+        password: signedInAccount?.password_login_enabled === false
+          ? null
+          : deleteAccountPassword.value,
         confirmation: document.querySelector("#delete-account-confirmation").value,
       }),
     });
@@ -1724,7 +1758,7 @@ friendsLists.addEventListener("click", changeProfileShare);
 authDialog.addEventListener("cancel", (event) => event.preventDefault());
 applyAdultPosterPreference(localStorage.getItem(adultPosterPreferenceKey) === "true");
 loadTmdbStatus();
-bootstrapApplication();
+configureAuthentication().then(bootstrapApplication);
 switchView(
   location.hash === "#movie-night"
     ? "group"

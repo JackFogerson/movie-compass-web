@@ -20,7 +20,13 @@ from uuid import uuid4
 
 import typer
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
@@ -47,6 +53,7 @@ from app.services.email_delivery import (
     send_email_verification_code,
     send_password_reset_code,
 )
+from app.services.google_oauth import authorization_url, exchange_and_verify
 from app.services.group_recommendations import (
     clear_group_recommendation_cache,
     generate_group_recommendations,
@@ -70,10 +77,13 @@ from app.services.web_auth import (
     COOKIE_NAME,
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
+    GOOGLE_OAUTH_COOKIE_NAME,
     create_csrf_token,
+    create_google_oauth_cookie,
     create_session_token,
     hash_password,
     normalize_email,
+    read_google_oauth_cookie,
     read_session_token,
     verify_password,
 )
@@ -153,7 +163,7 @@ class EmailVerificationCodeRequest(BaseModel):
 
 
 class AccountDeleteRequest(BaseModel):
-    password: str = Field(min_length=10, max_length=200)
+    password: str | None = Field(default=None, min_length=10, max_length=200)
     confirmation: str = Field(min_length=1, max_length=20)
 
 
@@ -365,7 +375,7 @@ def _tmdb_search_ids(query: str, year: int | None, limit: int) -> list[int]:
         client.close()
 
 
-def _set_session_cookie(response: JSONResponse, account: Account) -> None:
+def _set_session_cookie(response: Response, account: Account) -> None:
     token = create_session_token(
         settings.web_session_secret,
         account.id,
@@ -426,6 +436,8 @@ def _account_summary(account: Account) -> dict:
         "display_name": account.display_name,
         "email": account.email,
         "email_verified": account.email_verified_at is not None,
+        "password_login_enabled": bool(account.password_login_enabled),
+        "google_connected": bool(account.google_subject),
     }
 
 
@@ -565,6 +577,8 @@ async def add_browser_security_headers(request: Request, call_next):
 
 @app.post("/auth/register")
 def register_account(request: AccountRegistration) -> JSONResponse:
+    if not settings.password_auth_enabled:
+        raise HTTPException(status_code=404, detail="Email-and-password registration is disabled")
     email = normalize_email(request.email)
     with SessionLocal() as session:
         if session.scalar(select(Account.id).where(Account.email == email)) is not None:
@@ -668,6 +682,8 @@ def request_account_email_verification(
 
 @app.post("/auth/login")
 def login_account(http_request: Request, request: AccountCredentials) -> JSONResponse:
+    if not settings.password_auth_enabled:
+        raise HTTPException(status_code=404, detail="Email-and-password sign-in is disabled")
     email = normalize_email(request.email)
     rate_key = f"login:{_client_ip(http_request)}:{email}"
     decision = login_rate_limiter.consume(
@@ -678,13 +694,119 @@ def login_account(http_request: Request, request: AccountCredentials) -> JSONRes
     _enforce_rate_limit(decision, "Too many sign-in attempts. Please wait and try again.")
     with SessionLocal() as session:
         account = session.scalar(select(Account).where(Account.email == email))
-        if account is None or not verify_password(request.password, account.password_hash):
+        if (
+            account is None
+            or not account.password_login_enabled
+            or not verify_password(request.password, account.password_hash)
+        ):
             raise HTTPException(status_code=401, detail="Email or password is incorrect")
         if settings.registration_email_verification and account.email_verified_at is None:
             raise HTTPException(status_code=403, detail="Verify your email before signing in")
         payload = _account_summary(account)
         response = JSONResponse(payload)
         _set_session_cookie(response, account)
+        return response
+
+
+@app.get("/auth/config")
+def authentication_config() -> dict:
+    return {
+        "password_enabled": settings.password_auth_enabled,
+        "google_enabled": settings.google_auth_enabled,
+    }
+
+
+@app.get("/auth/google/start")
+def start_google_sign_in() -> RedirectResponse:
+    if not settings.google_auth_enabled:
+        raise HTTPException(status_code=404, detail="Google sign-in is disabled")
+    client_id = (settings.google_oauth_client_id or "").strip()
+    redirect_uri = (settings.google_oauth_redirect_uri or "").strip()
+    if not client_id or not redirect_uri:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    response = RedirectResponse(
+        authorization_url(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            state=state,
+            nonce=nonce,
+        ),
+        status_code=302,
+    )
+    response.set_cookie(
+        GOOGLE_OAUTH_COOKIE_NAME,
+        create_google_oauth_cookie(settings.web_session_secret, state, nonce),
+        max_age=600,
+        httponly=True,
+        secure=settings.web_cookie_secure,
+        samesite="lax",
+        path="/auth/google/callback",
+    )
+    return response
+
+
+@app.get("/auth/google/callback")
+async def finish_google_sign_in(request: Request) -> RedirectResponse:
+    if not settings.google_auth_enabled:
+        raise HTTPException(status_code=404, detail="Google sign-in is disabled")
+    oauth_cookie = read_google_oauth_cookie(
+        settings.web_session_secret,
+        request.cookies.get(GOOGLE_OAUTH_COOKIE_NAME, ""),
+    )
+    returned_state = request.query_params.get("state", "")
+    code = request.query_params.get("code", "")
+    if (
+        oauth_cookie is None
+        or not code
+        or not returned_state
+        or not secrets.compare_digest(oauth_cookie["state"], returned_state)
+    ):
+        raise HTTPException(status_code=400, detail="Google sign-in request is invalid or expired")
+    try:
+        claims = await exchange_and_verify(
+            code=code,
+            client_id=(settings.google_oauth_client_id or "").strip(),
+            client_secret=(settings.google_oauth_client_secret or "").strip(),
+            redirect_uri=(settings.google_oauth_redirect_uri or "").strip(),
+            expected_nonce=oauth_cookie["nonce"],
+        )
+    except Exception as error:
+        logger.warning("Google sign-in failed: %s", error)
+        response = RedirectResponse("/?auth_error=google", status_code=302)
+        response.delete_cookie(GOOGLE_OAUTH_COOKIE_NAME, path="/auth/google/callback")
+        return response
+
+    email = normalize_email(str(claims["email"]))
+    google_subject = str(claims["sub"])
+    display_name = str(claims.get("name") or email.split("@", 1)[0])[:100]
+    with SessionLocal() as session:
+        account = session.scalar(select(Account).where(Account.google_subject == google_subject))
+        if account is None:
+            account = session.scalar(select(Account).where(Account.email == email))
+            if account is not None and account.google_subject not in {None, google_subject}:
+                raise HTTPException(
+                    status_code=409, detail="That email uses another Google account"
+                )
+        if account is None:
+            account = Account(
+                email=email,
+                display_name=display_name,
+                password_hash=hash_password(secrets.token_urlsafe(48)),
+                password_login_enabled=False,
+                google_subject=google_subject,
+                email_verified_at=datetime.now(UTC),
+            )
+            session.add(account)
+        else:
+            account.google_subject = google_subject
+            account.email_verified_at = account.email_verified_at or datetime.now(UTC)
+        session.commit()
+        session.refresh(account)
+        response = RedirectResponse("/", status_code=302)
+        _set_session_cookie(response, account)
+        response.delete_cookie(GOOGLE_OAUTH_COOKIE_NAME, path="/auth/google/callback")
         return response
 
 
@@ -736,6 +858,8 @@ def change_account_password(http_request: Request, request: PasswordChangeReques
             or int(account.session_version or 1) != identity.session_version
         ):
             raise HTTPException(status_code=401, detail="Session is no longer valid")
+        if not account.password_login_enabled:
+            raise HTTPException(status_code=409, detail="This account signs in with Google")
         if not verify_password(request.current_password, account.password_hash):
             raise HTTPException(status_code=401, detail="Current password is incorrect")
         if verify_password(request.new_password, account.password_hash):
@@ -766,7 +890,7 @@ def request_account_password_reset(
     _enforce_rate_limit(decision, "Too many reset requests. Please wait and try again.")
     with SessionLocal() as session:
         account = session.scalar(select(Account).where(Account.email == email))
-        if account is None:
+        if account is None or not account.password_login_enabled:
             return {"accepted": True}
         recovery_code = f"{secrets.randbelow(1_000_000):06d}"
         account.recovery_code_hash = hash_password(recovery_code)
@@ -814,6 +938,7 @@ def recover_account_password(
             expiry = expiry.replace(tzinfo=UTC)
         if (
             account is None
+            or not account.password_login_enabled
             or not account.recovery_code_hash
             or expiry is None
             or expiry <= datetime.now(UTC)
@@ -850,8 +975,9 @@ def delete_account(http_request: Request, request: AccountDeleteRequest) -> JSON
             or int(account.session_version or 1) != identity.session_version
         ):
             raise HTTPException(status_code=401, detail="Session is no longer valid")
-        if not verify_password(request.password, account.password_hash):
-            raise HTTPException(status_code=401, detail="Password is incorrect")
+        if account.password_login_enabled:
+            if not request.password or not verify_password(request.password, account.password_hash):
+                raise HTTPException(status_code=401, detail="Password is incorrect")
         profiles = session.scalars(select(User).where(User.owner_account_id == account.id)).all()
         profile_slugs = [profile.slug for profile in profiles]
         for profile in profiles:

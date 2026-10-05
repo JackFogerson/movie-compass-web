@@ -18,7 +18,11 @@
 
     <dialog id="auth-dialog" class="auth-dialog">
       <div class="auth-brand"><span class="brand-mark">MC</span><div><strong>Movie Compass</strong><small>Your profiles, together in one private account.</small></div></div>
-      <div class="auth-grid">
+      <div id="google-auth-section" class="google-auth-section" hidden>
+        <a class="google-sign-in" href="/auth/google/start"><span aria-hidden="true">G</span>Continue with Google</a>
+        <p>Google confirms your email, so Movie Compass never stores a password or needs to email you a code.</p>
+      </div>
+      <div id="password-auth-section" class="auth-grid">
         <form id="login-form" class="auth-form">
           <div><span class="context-label">WELCOME BACK</span><h2>Sign in</h2></div>
           <label>Email<input id="login-email" type="email" autocomplete="email" required /></label>
@@ -43,7 +47,7 @@
           <button id="resend-verification-code" class="secondary-button" type="button">Send another code</button>
         </div>
       </form>
-      <details class="auth-recovery">
+      <details id="auth-recovery" class="auth-recovery">
         <summary>Forgot your password?</summary>
         <form id="request-reset-code-form" class="auth-form recovery-form">
           <p>Enter your account email and we will send a six-digit code that expires in 15 minutes.</p>
@@ -267,7 +271,7 @@
 
     <dialog id="account-dialog" class="auth-dialog account-dialog">
       <div class="auth-brand"><span class="brand-mark">MC</span><div><strong>Account and privacy</strong><small>Control the personal data stored by Movie Compass.</small></div></div>
-      <div class="account-privacy-copy">
+      <div id="change-password-copy" class="account-privacy-copy">
         <h2>Change password</h2>
         <p>Confirm your existing password before choosing a new password of at least 10 characters.</p>
       </div>
@@ -283,7 +287,7 @@
         <p>This permanently removes every profile you own, including ratings, reviews, imports, generated model data, friend connections, and profile-sharing permissions. Movie catalog data shared by the service is not personal and is retained.</p>
       </div>
       <form id="delete-account-form" class="account-delete-form">
-        <label>Current password<input id="delete-account-password" type="password" autocomplete="current-password" minlength="10" required /></label>
+        <label id="delete-password-label">Current password<input id="delete-account-password" type="password" autocomplete="current-password" minlength="10" required /></label>
         <label>Type DELETE<input id="delete-account-confirmation" autocomplete="off" required /></label>
         <div class="dialog-actions"><button id="close-account-dialog" class="secondary-button" type="button">Cancel</button><button class="danger-button" type="submit">Delete my account permanently</button></div>
       </form>

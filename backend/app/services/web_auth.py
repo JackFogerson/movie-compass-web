@@ -9,6 +9,7 @@ from pwdlib import PasswordHash
 COOKIE_NAME = "movie_compass_session"
 CSRF_COOKIE_NAME = "movie_compass_csrf"
 CSRF_HEADER_NAME = "x-movie-compass-csrf"
+GOOGLE_OAUTH_COOKIE_NAME = "movie_compass_google_oauth"
 _PASSWORD_HASH = PasswordHash.recommended()
 
 
@@ -29,6 +30,22 @@ def hash_password(value: str) -> str:
 
 def verify_password(value: str, encoded: str) -> bool:
     return _PASSWORD_HASH.verify(value, encoded)
+
+
+def create_google_oauth_cookie(secret: str, state: str, nonce: str) -> str:
+    serializer = URLSafeTimedSerializer(secret, salt="movie-compass-google-oauth")
+    return serializer.dumps({"state": state, "nonce": nonce})
+
+
+def read_google_oauth_cookie(secret: str, token: str, max_age_seconds: int = 600) -> dict | None:
+    serializer = URLSafeTimedSerializer(secret, salt="movie-compass-google-oauth")
+    try:
+        payload = serializer.loads(token, max_age=max_age_seconds)
+        state = str(payload["state"])
+        nonce = str(payload["nonce"])
+        return {"state": state, "nonce": nonce}
+    except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
+        return None
 
 
 def create_csrf_token() -> str:
