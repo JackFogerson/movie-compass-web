@@ -32,6 +32,8 @@ const manageAccountButton = document.querySelector("#manage-account");
 const signOutButton = document.querySelector("#sign-out");
 const accountDialog = document.querySelector("#account-dialog");
 const closeAccountDialogButton = document.querySelector("#close-account-dialog");
+const changePasswordForm = document.querySelector("#change-password-form");
+const changePasswordStatus = document.querySelector("#change-password-status");
 const deleteAccountForm = document.querySelector("#delete-account-form");
 const deleteAccountStatus = document.querySelector("#delete-account-status");
 const yearMinInput = document.querySelector("#year-min");
@@ -1570,11 +1572,41 @@ signOutButton.addEventListener("click", async () => {
   location.replace("/");
 });
 manageAccountButton.addEventListener("click", () => {
+  changePasswordForm.reset();
+  changePasswordStatus.textContent = "";
   deleteAccountForm.reset();
   deleteAccountStatus.textContent = "";
   accountDialog.showModal();
 });
 closeAccountDialogButton.addEventListener("click", () => accountDialog.close());
+changePasswordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const currentPassword = document.querySelector("#current-account-password").value;
+  const newPassword = document.querySelector("#new-account-password").value;
+  const confirmation = document.querySelector("#confirm-account-password").value;
+  if (newPassword !== confirmation) {
+    changePasswordStatus.textContent = "The two new-password entries do not match.";
+    return;
+  }
+  const submitButton = changePasswordForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  changePasswordStatus.textContent = "Changing password…";
+  try {
+    const response = await fetch("/auth/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Password could not be changed");
+    changePasswordForm.reset();
+    changePasswordStatus.textContent = "Password changed successfully.";
+  } catch (error) {
+    changePasswordStatus.textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
 deleteAccountForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   deleteAccountStatus.textContent = "Deleting your account…";

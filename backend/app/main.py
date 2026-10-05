@@ -141,6 +141,11 @@ class AccountDeleteRequest(BaseModel):
     confirmation: str = Field(min_length=1, max_length=20)
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=10, max_length=200)
+    new_password: str = Field(min_length=10, max_length=200)
+
+
 class FriendRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
 
@@ -567,6 +572,35 @@ def current_account(request: Request) -> dict:
         if account is None:
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         return {"id": account.id, "email": account.email, "display_name": account.display_name}
+
+
+@app.put("/auth/password")
+def change_account_password(
+    http_request: Request, request: PasswordChangeRequest
+) -> JSONResponse:
+    """Change a signed-in account password after confirming the current password."""
+    identity = read_session_token(
+        settings.web_session_secret,
+        http_request.cookies.get(COOKIE_NAME, ""),
+        settings.web_session_days * 86_400,
+    )
+    if identity is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        account = session.get(Account, identity.account_id)
+        if account is None or account.email != identity.email:
+            raise HTTPException(status_code=401, detail="Session is no longer valid")
+        if not verify_password(request.current_password, account.password_hash):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        if verify_password(request.new_password, account.password_hash):
+            raise HTTPException(
+                status_code=422, detail="New password must be different from the current password"
+            )
+        account.password_hash = hash_password(request.new_password)
+        session.commit()
+        response = JSONResponse({"changed": True})
+        _set_session_cookie(response, account)
+        return response
 
 
 @app.delete("/auth/account")

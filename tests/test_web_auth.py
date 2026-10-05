@@ -248,3 +248,58 @@ def test_account_deletion_requires_password_and_removes_personal_data(monkeypatc
     with session_factory() as session:
         assert session.query(Account).count() == 0
         assert session.query(User).count() == 0
+
+
+def test_signed_in_account_can_change_password(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+
+    client = TestClient(app)
+    credentials = {
+        "email": "change-password@example.com",
+        "password": "original-test-password",
+    }
+    assert client.post(
+        "/auth/register", json={"display_name": "Password Changer", **credentials}
+    ).status_code == 201
+
+    rejected = client.put(
+        "/auth/password",
+        headers=_csrf_headers(client),
+        json={
+            "current_password": "incorrect-password",
+            "new_password": "replacement-test-password",
+        },
+    )
+    assert rejected.status_code == 401
+
+    changed = client.put(
+        "/auth/password",
+        headers=_csrf_headers(client),
+        json={
+            "current_password": credentials["password"],
+            "new_password": "replacement-test-password",
+        },
+    )
+    assert changed.status_code == 200
+    assert changed.json() == {"changed": True}
+
+    old_login = TestClient(app).post("/auth/login", json=credentials)
+    assert old_login.status_code == 401
+    new_login = TestClient(app).post(
+        "/auth/login",
+        json={
+            "email": credentials["email"],
+            "password": "replacement-test-password",
+        },
+    )
+    assert new_login.status_code == 200
