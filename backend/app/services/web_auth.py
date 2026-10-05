@@ -16,6 +16,7 @@ _PASSWORD_HASH = PasswordHash.recommended()
 class SessionIdentity:
     account_id: int
     email: str
+    session_version: int
 
 
 def normalize_email(value: str) -> str:
@@ -34,15 +35,27 @@ def create_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def create_session_token(secret: str, account_id: int, email: str) -> str:
+def create_session_token(
+    secret: str, account_id: int, email: str, session_version: int = 1
+) -> str:
     serializer = URLSafeTimedSerializer(secret, salt="movie-compass-session")
-    return serializer.dumps({"account_id": account_id, "email": email})
+    return serializer.dumps(
+        {
+            "account_id": account_id,
+            "email": email,
+            "session_version": session_version,
+        }
+    )
 
 
 def read_session_token(secret: str, token: str, max_age_seconds: int) -> SessionIdentity | None:
     serializer = URLSafeTimedSerializer(secret, salt="movie-compass-session")
     try:
         payload = serializer.loads(token, max_age=max_age_seconds)
-        return SessionIdentity(int(payload["account_id"]), str(payload["email"]))
+        return SessionIdentity(
+            int(payload["account_id"]),
+            str(payload["email"]),
+            int(payload.get("session_version", 1)),
+        )
     except (BadSignature, SignatureExpired, KeyError, TypeError, ValueError):
         return None

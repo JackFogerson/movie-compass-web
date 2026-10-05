@@ -15,6 +15,7 @@ so the website link does not need to change for every release.
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Double-submit CSRF protection for every cookie-authenticated mutation.
 - Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
+- Password changes and downloadable one-time recovery codes; a successful recovery revokes older sessions.
 - Password-confirmed account deletion covering owned profiles, ratings, reviews, friendships,
   sharing grants, and generated personal model data.
 - Fail-closed production configuration checks and browser security headers covering framing,

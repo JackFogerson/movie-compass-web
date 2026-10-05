@@ -146,6 +146,16 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(min_length=10, max_length=200)
 
 
+class RecoveryCodeRequest(BaseModel):
+    password: str = Field(min_length=10, max_length=200)
+
+
+class PasswordRecoveryRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    recovery_code: str = Field(min_length=16, max_length=200)
+    new_password: str = Field(min_length=10, max_length=200)
+
+
 class FriendRequest(BaseModel):
     email: str = Field(min_length=5, max_length=320)
 
@@ -343,7 +353,12 @@ def _tmdb_search_ids(query: str, year: int | None, limit: int) -> list[int]:
 
 
 def _set_session_cookie(response: JSONResponse, account: Account) -> None:
-    token = create_session_token(settings.web_session_secret, account.id, account.email)
+    token = create_session_token(
+        settings.web_session_secret,
+        account.id,
+        account.email,
+        int(account.session_version or 1),
+    )
     response.set_cookie(
         COOKIE_NAME,
         token,
@@ -419,7 +434,7 @@ async def protect_cookie_authenticated_mutations(request: Request, call_next):
     if (
         settings.web_auth_required
         and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
-        and request.url.path not in {"/auth/login", "/auth/register"}
+        and request.url.path not in {"/auth/login", "/auth/register", "/auth/recover"}
         and request.cookies.get(COOKIE_NAME)
     ):
         cookie_token = request.cookies.get(CSRF_COOKIE_NAME, "")
@@ -453,7 +468,11 @@ async def authenticate_web_request(request: Request, call_next):
         return JSONResponse({"detail": "Sign in required"}, status_code=401)
     with SessionLocal() as session:
         account = session.get(Account, identity.account_id)
-        if account is None or account.email != identity.email:
+        if (
+            account is None
+            or account.email != identity.email
+            or int(account.session_version or 1) != identity.session_version
+        ):
             return JSONResponse({"detail": "Session is no longer valid"}, status_code=401)
         request.state.account_id = account.id
 
@@ -569,7 +588,11 @@ def current_account(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Sign in required")
     with SessionLocal() as session:
         account = session.get(Account, identity.account_id)
-        if account is None:
+        if (
+            account is None
+            or account.email != identity.email
+            or int(account.session_version or 1) != identity.session_version
+        ):
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         return {"id": account.id, "email": account.email, "display_name": account.display_name}
 
@@ -588,7 +611,11 @@ def change_account_password(
         raise HTTPException(status_code=401, detail="Sign in required")
     with SessionLocal() as session:
         account = session.get(Account, identity.account_id)
-        if account is None or account.email != identity.email:
+        if (
+            account is None
+            or account.email != identity.email
+            or int(account.session_version or 1) != identity.session_version
+        ):
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         if not verify_password(request.current_password, account.password_hash):
             raise HTTPException(status_code=401, detail="Current password is incorrect")
@@ -597,8 +624,66 @@ def change_account_password(
                 status_code=422, detail="New password must be different from the current password"
             )
         account.password_hash = hash_password(request.new_password)
+        account.session_version = int(account.session_version or 1) + 1
         session.commit()
         response = JSONResponse({"changed": True})
+        _set_session_cookie(response, account)
+        return response
+
+
+@app.post("/auth/recovery-code")
+def create_account_recovery_code(
+    http_request: Request, request: RecoveryCodeRequest
+) -> dict:
+    """Replace and return the account's one-time recovery code."""
+    identity = read_session_token(
+        settings.web_session_secret,
+        http_request.cookies.get(COOKIE_NAME, ""),
+        settings.web_session_days * 86_400,
+    )
+    if identity is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    with SessionLocal() as session:
+        account = session.get(Account, identity.account_id)
+        if (
+            account is None
+            or account.email != identity.email
+            or int(account.session_version or 1) != identity.session_version
+        ):
+            raise HTTPException(status_code=401, detail="Session is no longer valid")
+        if not verify_password(request.password, account.password_hash):
+            raise HTTPException(status_code=401, detail="Password is incorrect")
+        recovery_code = secrets.token_urlsafe(24)
+        account.recovery_code_hash = hash_password(recovery_code)
+        session.commit()
+        return {"recovery_code": recovery_code}
+
+
+@app.post("/auth/recover")
+def recover_account_password(
+    http_request: Request, request: PasswordRecoveryRequest
+) -> JSONResponse:
+    """Consume a recovery code, reset the password, and revoke existing sessions."""
+    email = normalize_email(request.email)
+    decision = login_rate_limiter.consume(
+        f"recover:{_client_ip(http_request)}:{email}",
+        limit=settings.web_login_attempts,
+        window_seconds=settings.web_login_window_seconds,
+    )
+    _enforce_rate_limit(decision, "Too many recovery attempts. Please wait and try again.")
+    with SessionLocal() as session:
+        account = session.scalar(select(Account).where(Account.email == email))
+        if (
+            account is None
+            or not account.recovery_code_hash
+            or not verify_password(request.recovery_code, account.recovery_code_hash)
+        ):
+            raise HTTPException(status_code=401, detail="Recovery information is incorrect")
+        account.password_hash = hash_password(request.new_password)
+        account.recovery_code_hash = None
+        account.session_version = int(account.session_version or 1) + 1
+        session.commit()
+        response = JSONResponse(_account_summary(account))
         _set_session_cookie(response, account)
         return response
 
@@ -617,7 +702,11 @@ def delete_account(http_request: Request, request: AccountDeleteRequest) -> JSON
         raise HTTPException(status_code=401, detail="Sign in required")
     with SessionLocal() as session:
         account = session.get(Account, identity.account_id)
-        if account is None or account.email != identity.email:
+        if (
+            account is None
+            or account.email != identity.email
+            or int(account.session_version or 1) != identity.session_version
+        ):
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         if not verify_password(request.password, account.password_hash):
             raise HTTPException(status_code=401, detail="Password is incorrect")

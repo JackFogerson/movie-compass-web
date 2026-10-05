@@ -11,7 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from app.core.config import get_settings  # noqa: E402
 from app.db import models  # noqa: E402,F401
 from app.db.base import Base  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import create_engine, inspect, text  # noqa: E402
 
 
 def main() -> None:
@@ -35,6 +35,19 @@ def main() -> None:
                 cache.write_text("{}\n", encoding="utf-8")
     engine = create_engine(settings.database_url)
     Base.metadata.create_all(engine)
+    account_columns = {column["name"] for column in inspect(engine).get_columns("accounts")}
+    with engine.begin() as connection:
+        if "recovery_code_hash" not in account_columns:
+            connection.execute(
+                text("ALTER TABLE accounts ADD COLUMN recovery_code_hash VARCHAR(500)")
+            )
+        if "session_version" not in account_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE accounts ADD COLUMN session_version INTEGER "
+                    "NOT NULL DEFAULT 1"
+                )
+            )
     print(f"Initialized local database: {settings.database_url}")
 
 

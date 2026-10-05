@@ -303,3 +303,69 @@ def test_signed_in_account_can_change_password(monkeypatch) -> None:
         },
     )
     assert new_login.status_code == 200
+
+
+def test_recovery_code_resets_password_once_and_revokes_old_sessions(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+    main_module.login_rate_limiter.clear()
+
+    original = {
+        "email": "recover-me@example.com",
+        "password": "original-test-password",
+    }
+    owner = TestClient(app)
+    assert owner.post(
+        "/auth/register", json={"display_name": "Recover Me", **original}
+    ).status_code == 201
+    older_session = TestClient(app)
+    assert older_session.post("/auth/login", json=original).status_code == 200
+
+    created = owner.post(
+        "/auth/recovery-code",
+        headers=_csrf_headers(owner),
+        json={"password": original["password"]},
+    )
+    assert created.status_code == 200
+    code = created.json()["recovery_code"]
+    assert len(code) >= 24
+
+    recovered = TestClient(app)
+    reset = recovered.post(
+        "/auth/recover",
+        json={
+            "email": original["email"],
+            "recovery_code": code,
+            "new_password": "recovered-test-password",
+        },
+    )
+    assert reset.status_code == 200
+    assert recovered.get("/profiles").status_code == 200
+    assert older_session.get("/profiles").status_code == 401
+
+    reused = TestClient(app).post(
+        "/auth/recover",
+        json={
+            "email": original["email"],
+            "recovery_code": code,
+            "new_password": "another-test-password",
+        },
+    )
+    assert reused.status_code == 401
+    assert TestClient(app).post("/auth/login", json=original).status_code == 401
+    assert TestClient(app).post(
+        "/auth/login",
+        json={
+            "email": original["email"],
+            "password": "recovered-test-password",
+        },
+    ).status_code == 200

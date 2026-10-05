@@ -57,6 +57,11 @@ button, input, select { font: inherit; }
 .auth-form { display: grid; align-content: start; gap: 13px; padding: 24px 22px; background: #101419; }
 .auth-form h2 { margin: 5px 0 0; font: 500 1.55rem Georgia, serif; }
 .auth-privacy { margin: 0; padding: 0 22px 20px; color: var(--muted); font-size: .7rem; line-height: 1.5; }
+.auth-recovery { margin: 0 22px 18px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
+.auth-recovery summary { padding: 11px 13px; color: var(--blue); cursor: pointer; font-size: .76rem; font-weight: 700; }
+.auth-recovery .recovery-form { padding: 8px 13px 13px; background: transparent; }
+.auth-recovery .recovery-form p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.auth-recovery .status-message { padding: 0 13px 12px; }
 .account-dialog { width: min(620px, calc(100% - 28px)); }
 .account-privacy-copy { padding: 22px 22px 4px; }
 .account-privacy-copy h2 { margin: 0 0 8px; font: 500 1.5rem Georgia, serif; }
@@ -64,6 +69,7 @@ button, input, select { font: inherit; }
 .account-delete-form { display: grid; gap: 13px; padding: 18px 22px 8px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .account-dialog .status-message { padding: 0 22px 18px; }
+.recovery-code-output { display: block; margin: 4px 22px 12px; padding: 11px; overflow-wrap: anywhere; color: var(--gold); border: 1px dashed var(--gold-dark); border-radius: 8px; background: #090c0f; user-select: all; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 760; }
 .brand-mark {
   display: grid;
