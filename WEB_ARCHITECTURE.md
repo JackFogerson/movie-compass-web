@@ -50,11 +50,12 @@ include a restrictive content-security policy and related security headers.
 `/health` is a lightweight process-liveness check. Hosting and container orchestration use
 `/ready`, which also verifies the database, bundled recommendation catalog, and TMDB setup.
 
-## Suggested free preview deployment
+## Primary family deployment
 
-- Render free web service for the Docker container.
-- Supabase or Neon free PostgreSQL for persistent account/profile data.
-- Optional object storage later if profile exports or larger generated artifacts need retention.
+- Oracle Cloud Always Free Ampere A1 VM for an always-running Docker host.
+- PostgreSQL/pgvector on a persistent Docker volume on the VM.
+- Caddy for automatic HTTPS and reverse proxying.
+- Daily PostgreSQL dumps copied off the VM to Oracle Object Storage or another backup target.
 
-Free application containers have ephemeral disks. Profile-specific ranking and review-policy
-state now survives in PostgreSQL; local cache files may be discarded and rebuilt safely.
+The repository keeps a Render blueprint as an alternative preview host, but Render Free's idle
+sleep does not meet the desired immediate-access behavior. See `deploy/oracle/README.md`.

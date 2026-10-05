@@ -31,7 +31,8 @@ so the website link does not need to change for every release.
 - Reserved friendship and profile-sharing tables for the future social movie-night flow.
 - PostgreSQL/Alembic migration for accounts and ownership.
 - Responsive login/create-account interface integrated with the existing application.
-- Docker deployment and Render blueprint; PostgreSQL remains external and persistent.
+- Docker deployment for an always-running Oracle Cloud VM with PostgreSQL/pgvector and Caddy;
+  the Render blueprint remains an optional sleeping preview host.
 
 Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, provide `DATABASE_URL` for persistent PostgreSQL, and keep `TMDB_API_KEY` and `RESEND_API_KEY` in the host's secret manager. Set `EMAIL_FROM` to a sender on a domain verified with the email provider. Website users never enter their own service keys. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never a credential.
 
