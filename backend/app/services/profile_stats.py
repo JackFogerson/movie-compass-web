@@ -149,9 +149,7 @@ def build_taste_breakdown(
                 categories[category][label].append(rating)
 
     standard_deviation = sqrt(mean((rating - profile_average) ** 2 for rating in ratings))
-    unknown_certifications = len(
-        categories["certifications"].get(UNKNOWN_CERTIFICATION, [])
-    )
+    unknown_certifications = len(categories["certifications"].get(UNKNOWN_CERTIFICATION, []))
     known_certifications = len(ratings) - unknown_certifications
     repeated_minimum = 1 if include_singletons else 2
     return {
@@ -194,8 +192,6 @@ def build_taste_breakdown(
             "languages_explored": len(categories["languages"]),
             "certification_known_films": known_certifications,
             "certification_unknown_films": unknown_certifications,
-            "certification_coverage_percent": round(
-                known_certifications / len(ratings) * 100, 1
-            ),
+            "certification_coverage_percent": round(known_certifications / len(ratings) * 100, 1),
         },
     }

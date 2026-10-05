@@ -177,10 +177,10 @@ def test_manual_rating_search_uses_cached_result_during_tmdb_outage(monkeypatch)
         {
             "tmdb_id": 1058424,
             "title": "Hope",
-                "year": 2026,
-                "poster_url": "https://image.tmdb.org/t/p/w185/hope.jpg",
-                "media_type": "movie",
-                "adult": False,
-            }
+            "year": 2026,
+            "poster_url": "https://image.tmdb.org/t/p/w185/hope.jpg",
+            "media_type": "movie",
+            "adult": False,
+        }
     ]
     assert "bundled catalog" in result["warning"]

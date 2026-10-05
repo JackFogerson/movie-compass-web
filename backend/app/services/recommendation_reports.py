@@ -82,10 +82,7 @@ def load_recommendation_report(
                 normalized_genre is None
                 or normalized_genre in {str(value).casefold() for value in item.get("genres", [])}
             )
-            and (
-                media_type == "all"
-                or (media_type == "tv") == (int(item.get("tmdb_id") or 0) < 0)
-            )
+            and (media_type == "all" or (media_type == "tv") == (int(item.get("tmdb_id") or 0) < 0))
         )
 
     filtered = [item for item in source_recommendations if matches(item)][:limit]

@@ -10,7 +10,7 @@ Group=moviecompass
 WorkingDirectory=/opt/movie-compass
 EnvironmentFile=/etc/movie-compass.env
 Environment=PYTHONPATH=/opt/movie-compass/backend:/opt/movie-compass
-ExecStartPre=/opt/movie-compass/.venv/bin/alembic upgrade head
+ExecStartPre=/opt/movie-compass/.venv/bin/python /opt/movie-compass/scripts/init_local_db.py
 ExecStart=/opt/movie-compass/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 10000 --workers 1
 Restart=always
 RestartSec=5

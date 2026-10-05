@@ -11,7 +11,8 @@ so the website link does not need to change for every release.
 
 ## Web foundation included
 
-- Email/password registration and sign-in using Argon2 password hashing.
+- Email/password registration and sign-in using Argon2 password hashing; production registration
+  requires a short-lived six-digit email verification code.
 - Signed, HTTP-only session cookies with configurable secure-cookie behavior.
 - Double-submit CSRF protection for every cookie-authenticated mutation.
 - Sliding-window throttling for sign-in attempts and profile imports, plus a 100 MB upload cap.
@@ -52,8 +53,8 @@ required to put the site online.
 - Audience-reach filters for blockbuster, popular, cult classic, under-the-radar, and unknown/emerging titles. Reach is kept separate from predicted quality.
 - Per-profile Letterboxd ZIP upload, local-first catalog matching, and on-demand model fitting. Only the latest review per film is used, while rewatch counts are retained. Imports return structured JSON even when TMDB is temporarily unreachable, and unmapped films remain safely pending.
 
-Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, registration-email
-verification, distributed throttling, and production deployment are not yet complete.
+Automatic scheduled TMDB enrichment, comparative group-ranking evaluation, distributed
+throttling, and production deployment are not yet complete.
 
 ## Fast setup on another Windows laptop
 

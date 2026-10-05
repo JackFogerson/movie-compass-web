@@ -61,6 +61,58 @@ def test_account_registration_login_and_profile_isolation(monkeypatch) -> None:
     assert client.get("/profiles").status_code == 200
 
 
+def test_production_registration_requires_emailed_code(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    main_module = import_module("app.main")
+    monkeypatch.setattr(main_module, "SessionLocal", session_factory)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_auth_required", True)
+    monkeypatch.setattr(settings, "registration_email_verification", True)
+    monkeypatch.setattr(settings, "resend_api_key", "resend-test-key")
+    monkeypatch.setattr(settings, "email_from", "Movie Compass <noreply@example.com>")
+    main_module.login_rate_limiter.clear()
+    delivered = {}
+
+    def capture_code(**message) -> None:
+        delivered.update(message)
+
+    monkeypatch.setattr(main_module, "send_email_verification_code", capture_code)
+    credentials = {
+        "email": "verify-me@example.com",
+        "password": "a-strong-test-password",
+    }
+    client = TestClient(app)
+    registered = client.post(
+        "/auth/register",
+        json={"display_name": "Verify Me", **credentials},
+    )
+
+    assert registered.status_code == 202
+    assert registered.json() == {
+        "email": credentials["email"],
+        "verification_required": True,
+    }
+    assert client.get("/profiles").status_code == 401
+    assert client.post("/auth/login", json=credentials).status_code == 403
+
+    verified = client.post(
+        "/auth/verify-email",
+        json={
+            "email": credentials["email"],
+            "verification_code": delivered["code"],
+        },
+    )
+    assert verified.status_code == 200
+    assert verified.json()["email_verified"] is True
+    assert client.get("/profiles").status_code == 200
+
+
 def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -107,9 +159,7 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     assert alice.get("/friends").json()["outgoing"][0]["display_name"] == "Bob"
     assert bob.get("/friends").json()["incoming"][0]["display_name"] == "Alice"
 
-    accepted = bob.post(
-        f"/friends/{friendship_id}/accept", headers=_csrf_headers(bob)
-    )
+    accepted = bob.post(f"/friends/{friendship_id}/accept", headers=_csrf_headers(bob))
     assert accepted.status_code == 200
     assert accepted.json()["status"] == "accepted"
     assert alice.get("/friends").json()["friends"][0]["display_name"] == "Bob"
@@ -131,9 +181,9 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     )
     assert shared.status_code == 201
     profile_id = shared.json()["profile_id"]
-    assert alice.get("/friends").json()["friends"][0]["shared_profiles"][0][
-        "slug"
-    ] == "alice-profile"
+    assert (
+        alice.get("/friends").json()["friends"][0]["shared_profiles"][0]["slug"] == "alice-profile"
+    )
     assert bob.get("/profiles").json()["shared_profiles"] == [
         {
             "slug": "alice-profile",
@@ -151,9 +201,7 @@ def test_friend_requests_can_be_accepted_and_removed(monkeypatch) -> None:
     assert unshared.status_code == 200
     assert bob.get("/profiles").json()["shared_profiles"] == []
 
-    removed = alice.delete(
-        f"/friends/{friendship_id}", headers=_csrf_headers(alice)
-    )
+    removed = alice.delete(f"/friends/{friendship_id}", headers=_csrf_headers(alice))
     assert removed.status_code == 200
     assert bob.get("/friends").json() == {"friends": [], "incoming": [], "outgoing": []}
 
@@ -176,9 +224,10 @@ def test_repeated_login_attempts_are_rate_limited(monkeypatch) -> None:
 
     client = TestClient(app)
     credentials = {"email": "limited@example.com", "password": "a-strong-test-password"}
-    assert client.post(
-        "/auth/register", json={"display_name": "Limited", **credentials}
-    ).status_code == 201
+    assert (
+        client.post("/auth/register", json={"display_name": "Limited", **credentials}).status_code
+        == 201
+    )
     assert client.post("/auth/logout", headers=_csrf_headers(client)).status_code == 200
 
     for _ in range(2):
@@ -268,9 +317,12 @@ def test_signed_in_account_can_change_password(monkeypatch) -> None:
         "email": "change-password@example.com",
         "password": "original-test-password",
     }
-    assert client.post(
-        "/auth/register", json={"display_name": "Password Changer", **credentials}
-    ).status_code == 201
+    assert (
+        client.post(
+            "/auth/register", json={"display_name": "Password Changer", **credentials}
+        ).status_code
+        == 201
+    )
 
     rejected = client.put(
         "/auth/password",
@@ -332,9 +384,10 @@ def test_recovery_code_resets_password_once_and_revokes_old_sessions(monkeypatch
         "password": "original-test-password",
     }
     owner = TestClient(app)
-    assert owner.post(
-        "/auth/register", json={"display_name": "Recover Me", **original}
-    ).status_code == 201
+    assert (
+        owner.post("/auth/register", json={"display_name": "Recover Me", **original}).status_code
+        == 201
+    )
     older_session = TestClient(app)
     assert older_session.post("/auth/login", json=original).status_code == 200
 
@@ -370,10 +423,15 @@ def test_recovery_code_resets_password_once_and_revokes_old_sessions(monkeypatch
     )
     assert reused.status_code == 401
     assert TestClient(app).post("/auth/login", json=original).status_code == 401
-    assert TestClient(app).post(
-        "/auth/login",
-        json={
-            "email": original["email"],
-            "password": "recovered-test-password",
-        },
-    ).status_code == 200
+    assert (
+        TestClient(app)
+        .post(
+            "/auth/login",
+            json={
+                "email": original["email"],
+                "password": "recovered-test-password",
+            },
+        )
+        .status_code
+        == 200
+    )

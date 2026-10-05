@@ -43,14 +43,22 @@ def main() -> None:
             )
         if "session_version" not in account_columns:
             connection.execute(
-                text(
-                    "ALTER TABLE accounts ADD COLUMN session_version INTEGER "
-                    "NOT NULL DEFAULT 1"
-                )
+                text("ALTER TABLE accounts ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1")
             )
         if "recovery_code_expires_at" not in account_columns:
             connection.execute(
                 text("ALTER TABLE accounts ADD COLUMN recovery_code_expires_at DATETIME")
+            )
+        if "email_verified_at" not in account_columns:
+            connection.execute(text("ALTER TABLE accounts ADD COLUMN email_verified_at DATETIME"))
+            connection.execute(text("UPDATE accounts SET email_verified_at = CURRENT_TIMESTAMP"))
+        if "verification_code_hash" not in account_columns:
+            connection.execute(
+                text("ALTER TABLE accounts ADD COLUMN verification_code_hash VARCHAR(500)")
+            )
+        if "verification_code_expires_at" not in account_columns:
+            connection.execute(
+                text("ALTER TABLE accounts ADD COLUMN verification_code_expires_at DATETIME")
             )
     print(f"Initialized local database: {settings.database_url}")
 

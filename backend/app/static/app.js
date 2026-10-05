@@ -26,6 +26,10 @@ window.fetch = (input, options = {}) => {
 
 const loginForm = document.querySelector("#login-form");
 const registerForm = document.querySelector("#register-form");
+const verifyEmailForm = document.querySelector("#verify-email-form");
+const verificationEmailInput = document.querySelector("#verification-email");
+const verificationCodeInput = document.querySelector("#verification-code");
+const resendVerificationCodeButton = document.querySelector("#resend-verification-code");
 const requestResetCodeForm = document.querySelector("#request-reset-code-form");
 const recoverAccountForm = document.querySelector("#recover-account-form");
 const recoveryStatus = document.querySelector("#recovery-status");
@@ -1553,6 +1557,11 @@ loginForm.addEventListener("submit", async (event) => {
     await bootstrapApplication();
   } catch (error) {
     authStatus.textContent = error.message;
+    if (error.message.includes("Verify your email")) {
+      verificationEmailInput.value = document.querySelector("#login-email").value;
+      verifyEmailForm.hidden = false;
+      verificationCodeInput.focus();
+    }
   }
 });
 registerForm.addEventListener("submit", async (event) => {
@@ -1563,10 +1572,49 @@ registerForm.addEventListener("submit", async (event) => {
       email: document.querySelector("#register-email").value,
       password: document.querySelector("#register-password").value,
     });
+    if (account.verification_required) {
+      verificationEmailInput.value = account.email;
+      verifyEmailForm.hidden = false;
+      authStatus.textContent = "We sent a six-digit verification code to your email.";
+      verificationCodeInput.focus();
+      return;
+    }
     showSignedInAccount(account);
     await bootstrapApplication();
   } catch (error) {
     authStatus.textContent = error.message;
+  }
+});
+verifyEmailForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const account = await submitAccountForm("/auth/verify-email", {
+      email: verificationEmailInput.value,
+      verification_code: verificationCodeInput.value.trim(),
+    });
+    verifyEmailForm.hidden = true;
+    showSignedInAccount(account);
+    await bootstrapApplication();
+  } catch (error) {
+    authStatus.textContent = error.message;
+  }
+});
+resendVerificationCodeButton.addEventListener("click", async () => {
+  resendVerificationCodeButton.disabled = true;
+  authStatus.textContent = "Sending another code…";
+  try {
+    const response = await fetch("/auth/verify-email/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: verificationEmailInput.value }),
+    });
+    const result = await responseJson(response);
+    if (!response.ok) throw new Error(result.detail || "Verification code could not be sent");
+    authStatus.textContent = "If the account still needs verification, a new code is on its way.";
+  } catch (error) {
+    authStatus.textContent = error.message;
+  } finally {
+    resendVerificationCodeButton.disabled = false;
   }
 });
 requestResetCodeForm.addEventListener("submit", async (event) => {

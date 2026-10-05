@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     email_from: str | None = None
     password_reset_code_minutes: int = 15
+    registration_email_verification: bool = False
     allow_sqlite_production: bool = False
 
     @property
@@ -55,8 +56,7 @@ def production_configuration_errors(settings: Settings) -> list[str]:
             sqlite_database
             and sqlite_database != ":memory:"
             and (
-                Path(sqlite_database).is_absolute()
-                or PurePosixPath(sqlite_database).is_absolute()
+                Path(sqlite_database).is_absolute() or PurePosixPath(sqlite_database).is_absolute()
             )
         )
     if not database_is_persistent:
@@ -80,15 +80,20 @@ def production_configuration_errors(settings: Settings) -> list[str]:
         errors.append("RESEND_API_KEY must be configured")
     if not (settings.email_from or "").strip():
         errors.append("EMAIL_FROM must be configured")
+    if not settings.registration_email_verification:
+        errors.append("REGISTRATION_EMAIL_VERIFICATION must be true")
     if not 5 <= settings.password_reset_code_minutes <= 60:
         errors.append("PASSWORD_RESET_CODE_MINUTES must be between 5 and 60")
     if not 1 <= settings.web_session_days <= 90:
         errors.append("WEB_SESSION_DAYS must be between 1 and 90")
-    if min(
-        settings.web_login_attempts,
-        settings.web_login_window_seconds,
-        settings.web_profile_imports_per_hour,
-    ) < 1:
+    if (
+        min(
+            settings.web_login_attempts,
+            settings.web_login_window_seconds,
+            settings.web_profile_imports_per_hour,
+        )
+        < 1
+    ):
         errors.append("Web rate limits must be positive")
     return errors
 

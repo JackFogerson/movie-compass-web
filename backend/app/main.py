@@ -42,7 +42,11 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.services.display_metadata import enrich_display_metadata
-from app.services.email_delivery import EmailDeliveryError, send_password_reset_code
+from app.services.email_delivery import (
+    EmailDeliveryError,
+    send_email_verification_code,
+    send_password_reset_code,
+)
 from app.services.group_recommendations import (
     clear_group_recommendation_cache,
     generate_group_recommendations,
@@ -137,6 +141,15 @@ class AccountCredentials(BaseModel):
 
 class AccountRegistration(AccountCredentials):
     display_name: str = Field(min_length=1, max_length=100)
+
+
+class EmailVerificationRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    verification_code: str = Field(pattern=r"^\d{6}$")
+
+
+class EmailVerificationCodeRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
 
 
 class AccountDeleteRequest(BaseModel):
@@ -283,10 +296,7 @@ def _local_movie_search_results(query: str, year: int | None, limit: int) -> lis
         except (OSError, json.JSONDecodeError):
             continue
         for raw_tmdb_id, details in cached.items():
-            if (
-                not str(raw_tmdb_id).lstrip("-").isdigit()
-                or int(raw_tmdb_id) not in wanted_ids
-            ):
+            if not str(raw_tmdb_id).lstrip("-").isdigit() or int(raw_tmdb_id) not in wanted_ids:
                 continue
             tmdb_id = int(raw_tmdb_id)
             current = by_id.setdefault(tmdb_id, {})
@@ -415,7 +425,28 @@ def _account_summary(account: Account) -> dict:
         "id": account.id,
         "display_name": account.display_name,
         "email": account.email,
+        "email_verified": account.email_verified_at is not None,
     }
+
+
+def _new_email_code(account: Account) -> str:
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    account.verification_code_hash = hash_password(code)
+    account.verification_code_expires_at = datetime.now(UTC) + timedelta(
+        minutes=settings.password_reset_code_minutes
+    )
+    return code
+
+
+def _deliver_email_verification(account: Account, code: str) -> None:
+    send_email_verification_code(
+        api_key=settings.resend_api_key or "",
+        sender=settings.email_from or "",
+        recipient=account.email,
+        display_name=account.display_name,
+        code=code,
+        minutes=settings.password_reset_code_minutes,
+    )
 
 
 def _client_ip(request: Request) -> str:
@@ -542,14 +573,97 @@ def register_account(request: AccountRegistration) -> JSONResponse:
             email=email,
             display_name=request.display_name.strip(),
             password_hash=hash_password(request.password),
+            email_verified_at=(
+                None if settings.registration_email_verification else datetime.now(UTC)
+            ),
         )
         session.add(account)
+        verification_code = (
+            _new_email_code(account) if settings.registration_email_verification else None
+        )
         session.commit()
         session.refresh(account)
-        payload = {"id": account.id, "email": account.email, "display_name": account.display_name}
+        if verification_code is not None:
+            try:
+                _deliver_email_verification(account, verification_code)
+            except EmailDeliveryError as error:
+                session.delete(account)
+                session.commit()
+                logger.warning("Registration email delivery failed: %s", error)
+                raise HTTPException(
+                    status_code=503,
+                    detail="Verification email could not be sent. Please try again.",
+                ) from error
+            return JSONResponse(
+                {"email": account.email, "verification_required": True},
+                status_code=202,
+            )
+        payload = _account_summary(account)
         response = JSONResponse(payload, status_code=201)
         _set_session_cookie(response, account)
         return response
+
+
+@app.post("/auth/verify-email")
+def verify_account_email(http_request: Request, request: EmailVerificationRequest) -> JSONResponse:
+    email = normalize_email(request.email)
+    decision = login_rate_limiter.consume(
+        f"verify-email:{_client_ip(http_request)}:{email}",
+        limit=settings.web_login_attempts,
+        window_seconds=settings.web_login_window_seconds,
+    )
+    _enforce_rate_limit(decision, "Too many verification attempts. Please wait and try again.")
+    with SessionLocal() as session:
+        account = session.scalar(select(Account).where(Account.email == email))
+        expiry = account.verification_code_expires_at if account is not None else None
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        if (
+            account is None
+            or not account.verification_code_hash
+            or expiry is None
+            or expiry <= datetime.now(UTC)
+            or not verify_password(request.verification_code, account.verification_code_hash)
+        ):
+            raise HTTPException(status_code=401, detail="Verification code is incorrect or expired")
+        account.email_verified_at = datetime.now(UTC)
+        account.verification_code_hash = None
+        account.verification_code_expires_at = None
+        session.commit()
+        response = JSONResponse(_account_summary(account))
+        _set_session_cookie(response, account)
+        return response
+
+
+@app.post("/auth/verify-email/request", status_code=202)
+def request_account_email_verification(
+    http_request: Request, request: EmailVerificationCodeRequest
+) -> dict:
+    if not (settings.resend_api_key or "").strip() or not (settings.email_from or "").strip():
+        raise HTTPException(status_code=503, detail="Verification email is not configured")
+    email = normalize_email(request.email)
+    decision = login_rate_limiter.consume(
+        f"verify-email-request:{_client_ip(http_request)}:{email}",
+        limit=settings.web_login_attempts,
+        window_seconds=settings.web_login_window_seconds,
+    )
+    _enforce_rate_limit(decision, "Too many code requests. Please wait and try again.")
+    with SessionLocal() as session:
+        account = session.scalar(select(Account).where(Account.email == email))
+        if account is None or account.email_verified_at is not None:
+            return {"accepted": True}
+        code = _new_email_code(account)
+        session.commit()
+        try:
+            _deliver_email_verification(account, code)
+        except EmailDeliveryError as error:
+            account.verification_code_hash = None
+            account.verification_code_expires_at = None
+            session.commit()
+            logger.warning(
+                "Verification email redelivery failed for account %s: %s", account.id, error
+            )
+    return {"accepted": True}
 
 
 @app.post("/auth/login")
@@ -566,7 +680,9 @@ def login_account(http_request: Request, request: AccountCredentials) -> JSONRes
         account = session.scalar(select(Account).where(Account.email == email))
         if account is None or not verify_password(request.password, account.password_hash):
             raise HTTPException(status_code=401, detail="Email or password is incorrect")
-        payload = {"id": account.id, "email": account.email, "display_name": account.display_name}
+        if settings.registration_email_verification and account.email_verified_at is None:
+            raise HTTPException(status_code=403, detail="Verify your email before signing in")
+        payload = _account_summary(account)
         response = JSONResponse(payload)
         _set_session_cookie(response, account)
         return response
@@ -596,15 +712,14 @@ def current_account(request: Request) -> dict:
             account is None
             or account.email != identity.email
             or int(account.session_version or 1) != identity.session_version
+            or (settings.registration_email_verification and account.email_verified_at is None)
         ):
             raise HTTPException(status_code=401, detail="Session is no longer valid")
-        return {"id": account.id, "email": account.email, "display_name": account.display_name}
+        return _account_summary(account)
 
 
 @app.put("/auth/password")
-def change_account_password(
-    http_request: Request, request: PasswordChangeRequest
-) -> JSONResponse:
+def change_account_password(http_request: Request, request: PasswordChangeRequest) -> JSONResponse:
     """Change a signed-in account password after confirming the current password."""
     identity = read_session_token(
         settings.web_session_secret,
@@ -737,9 +852,7 @@ def delete_account(http_request: Request, request: AccountDeleteRequest) -> JSON
             raise HTTPException(status_code=401, detail="Session is no longer valid")
         if not verify_password(request.password, account.password_hash):
             raise HTTPException(status_code=401, detail="Password is incorrect")
-        profiles = session.scalars(
-            select(User).where(User.owner_account_id == account.id)
-        ).all()
+        profiles = session.scalars(select(User).where(User.owner_account_id == account.id)).all()
         profile_slugs = [profile.slug for profile in profiles]
         for profile in profiles:
             session.delete(profile)
@@ -764,8 +877,7 @@ def list_friends(request: Request) -> dict:
     with SessionLocal() as session:
         relationships = session.scalars(
             select(Friendship).where(
-                (Friendship.requester_id == account_id)
-                | (Friendship.addressee_id == account_id)
+                (Friendship.requester_id == account_id) | (Friendship.addressee_id == account_id)
             )
         ).all()
         account_ids = {
@@ -774,10 +886,14 @@ def list_friends(request: Request) -> dict:
             else relationship.requester_id
             for relationship in relationships
         }
-        accounts = {
-            account.id: account
-            for account in session.scalars(select(Account).where(Account.id.in_(account_ids)))
-        } if account_ids else {}
+        accounts = (
+            {
+                account.id: account
+                for account in session.scalars(select(Account).where(Account.id.in_(account_ids)))
+            }
+            if account_ids
+            else {}
+        )
         result = {"friends": [], "incoming": [], "outgoing": []}
         for relationship in relationships:
             other_id = (
@@ -966,10 +1082,10 @@ def unshare_profile(friendship_id: int, profile_id: int, request: Request) -> di
         raise HTTPException(status_code=401, detail="Sign in required")
     with SessionLocal() as session:
         friendship = session.get(Friendship, friendship_id)
-        if (
-            friendship is None
-            or account_id not in {friendship.requester_id, friendship.addressee_id}
-        ):
+        if friendship is None or account_id not in {
+            friendship.requester_id,
+            friendship.addressee_id,
+        }:
             raise HTTPException(status_code=404, detail="Friendship not found")
         recipient_id = (
             friendship.addressee_id
@@ -1094,9 +1210,10 @@ def profiles(request: Request) -> dict:
         owners = session.scalars(query).all()
         result = []
         for owner in owners:
-            ranking_ready = has_profile_artifact(owner.slug, "recommendation", "all") or (
-                artifact / "recommendations" / owner.slug / "all.json"
-            ).exists()
+            ranking_ready = (
+                has_profile_artifact(owner.slug, "recommendation", "all")
+                or (artifact / "recommendations" / owner.slug / "all.json").exists()
+            )
             total = (
                 session.scalar(
                     select(func.count())
@@ -1610,9 +1727,7 @@ def rating_movie_search(
             results_by_id = {
                 int(item["id"]): item for item in [*local_results, *live_results] if item.get("id")
             }
-            ranked_results = rank_title_search_results(
-                q, [*live_results, *local_results], 12
-            )
+            ranked_results = rank_title_search_results(q, [*live_results, *local_results], 12)
             ordered_ids = [int(item["id"]) for item in ranked_results if item.get("id")]
             results = [results_by_id[item_id] for item_id in dict.fromkeys(ordered_ids)][:12]
             search_warning = None

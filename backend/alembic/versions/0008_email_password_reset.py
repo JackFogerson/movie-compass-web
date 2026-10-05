@@ -10,9 +10,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "accounts", sa.Column("recovery_code_expires_at", sa.DateTime(timezone=True))
-    )
+    op.add_column("accounts", sa.Column("recovery_code_expires_at", sa.DateTime(timezone=True)))
 
 
 def downgrade() -> None:

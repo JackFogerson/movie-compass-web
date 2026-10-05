@@ -44,8 +44,7 @@ def main(limit: int = 100) -> None:
     selected: list[int] = []
     with sqlite3.connect(database) as connection:
         cursor = connection.execute(
-            "SELECT tmdb_id FROM movies WHERE adult = 0 AND video = 0 "
-            "ORDER BY popularity DESC"
+            "SELECT tmdb_id FROM movies WHERE adult = 0 AND video = 0 ORDER BY popularity DESC"
         )
         for (tmdb_id,) in cursor:
             if int(tmdb_id) in covered:

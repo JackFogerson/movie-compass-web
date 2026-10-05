@@ -34,9 +34,9 @@ Shared MovieLens/TMDB artifacts remain immutable build assets.
 
 1. Set a unique `WEB_SESSION_SECRET` and rotate the TMDB key previously used for local development.
 2. Require HTTPS and `WEB_COOKIE_SECURE=true`.
-3. Password reset uses an emailed, rate-limited six-digit code with a short expiry and revokes
-   older sessions after success. Add registration-email verification and move preview throttling
-   to a shared store before scaling the web service beyond one instance.
+3. Registration and password reset use emailed, rate-limited six-digit codes with short expiries;
+   a successful password reset revokes older sessions. Move preview throttling to a shared store
+   before scaling the web service beyond one instance.
 4. CSRF tokens protect cookie-authenticated mutations; keep them covered by integration tests.
 5. Account and profile deletion plus profile export are implemented; add the published privacy
    policy and formal retention schedule before a public launch.

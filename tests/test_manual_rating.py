@@ -94,6 +94,7 @@ def test_manual_rating_is_saved_and_rebuilds_profile(tmp_path, monkeypatch) -> N
             ),
         )
         search = main_module.rating_movie_search("The Matrix", 1999, "critic")
+
         class OfflineTmdbClient:
             def __init__(self, _key):
                 pass
@@ -194,9 +195,7 @@ def test_tv_miniseries_can_be_found_and_saved_as_a_rating(tmp_path, monkeypatch)
                 "genres": [{"name": "Animation"}, {"name": "Mystery"}],
                 "keywords": {"results": [{"name": "dark fantasy"}]},
                 "credits": {"crew": [], "cast": [{"name": "Elijah Wood"}]},
-                "content_ratings": {
-                    "results": [{"iso_3166_1": "US", "rating": "TV-PG"}]
-                },
+                "content_ratings": {"results": [{"iso_3166_1": "US", "rating": "TV-PG"}]},
             }
 
         def close(self):
@@ -212,9 +211,7 @@ def test_tv_miniseries_can_be_found_and_saved_as_a_rating(tmp_path, monkeypatch)
     monkeypatch.setattr(main_module, "_latest_artifact", lambda _path: tmp_path / "artifact")
     monkeypatch.setattr(main_module, "generate_recommendations", lambda *_args, **_kwargs: {})
     try:
-        search = main_module.rating_movie_search(
-            "Over the Garden Wall", 2014, "miniseries-fan"
-        )
+        search = main_module.rating_movie_search("Over the Garden Wall", 2014, "miniseries-fan")
         selected = search["results"][0]
         result = save_manual_rating(
             "miniseries-fan",

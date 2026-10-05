@@ -28,14 +28,10 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        sa.UniqueConstraint(
-            "user_id", "artifact_type", "artifact_key", name="uq_profile_artifact"
-        ),
+        sa.UniqueConstraint("user_id", "artifact_type", "artifact_key", name="uq_profile_artifact"),
     )
     op.create_index("ix_profile_artifacts_user_id", "profile_artifacts", ["user_id"])
-    op.create_index(
-        "ix_profile_artifacts_artifact_type", "profile_artifacts", ["artifact_type"]
-    )
+    op.create_index("ix_profile_artifacts_artifact_type", "profile_artifacts", ["artifact_type"])
 
 
 def downgrade() -> None:

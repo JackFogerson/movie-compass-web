@@ -9,9 +9,7 @@ from app.db.models import ProfileArtifact, User
 from app.db.session import SessionLocal
 
 
-def save_profile_artifact(
-    user: str, artifact_type: str, artifact_key: str, payload: dict
-) -> bool:
+def save_profile_artifact(user: str, artifact_type: str, artifact_key: str, payload: dict) -> bool:
     """Upsert one generated profile document; return false for an unknown profile."""
     with SessionLocal() as session:
         owner = session.scalar(select(User).where(User.slug == user))
@@ -38,9 +36,7 @@ def save_profile_artifact(
     return True
 
 
-def load_profile_artifact(
-    user: str, artifact_type: str, artifact_key: str
-) -> dict | None:
+def load_profile_artifact(user: str, artifact_type: str, artifact_key: str) -> dict | None:
     with SessionLocal() as session:
         payload = session.scalar(
             select(ProfileArtifact.payload_json)

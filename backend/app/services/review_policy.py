@@ -12,17 +12,11 @@ from ml.evaluation.review_policy import evaluate_review_policy
 def refresh_review_policy(user: str, details_cache: Path, output: Path) -> dict:
     try:
         cached = (
-            json.loads(details_cache.read_text(encoding="utf-8"))
-            if details_cache.is_file()
-            else {}
+            json.loads(details_cache.read_text(encoding="utf-8")) if details_cache.is_file() else {}
         )
     except (OSError, json.JSONDecodeError):
         cached = {}
-    details = {
-        int(key): value
-        for key, value in cached.items()
-        if value.get("missing") is not True
-    }
+    details = {int(key): value for key, value in cached.items() if value.get("missing") is not True}
     with SessionLocal() as session:
         ratings = personal_tmdb_ratings(session, user)
         reviews = personal_tmdb_reviews(session, user)

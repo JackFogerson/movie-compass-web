@@ -23,7 +23,8 @@
 
 1. Install the lightweight systemd/Cloudflare Tunnel deployment using
    `deploy/google-cloud/README.md`.
-2. Run migrations and verify SQLite/WAL persistence across service and VM restarts.
+2. Run the SQLite schema initializer and verify SQLite/WAL persistence across service and VM
+   restarts. The PostgreSQL Alembic chain is not used on the one-VM SQLite deployment.
 3. Verify liveness/readiness, TMDB connectivity, HTTPS, cookies, and security headers.
 4. Test registration and a real six-digit password-reset email end to end.
 5. Import/export/restore a disposable profile and verify rankings, search, and shared movie night.

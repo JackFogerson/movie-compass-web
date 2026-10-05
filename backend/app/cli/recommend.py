@@ -252,8 +252,7 @@ def main(
                         first_air_date_lte=(f"{year_max}-12-31" if year_max else None),
                     )
                     recent_candidates.extend(
-                        normalize_tv_search_result(item)
-                        for item in response.get("results", [])
+                        normalize_tv_search_result(item) for item in response.get("results", [])
                     )
                     if page >= int(response.get("total_pages") or page):
                         break

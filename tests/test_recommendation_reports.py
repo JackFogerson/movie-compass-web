@@ -89,9 +89,7 @@ def test_ui_disables_cache_and_movie_search_returns_scores(
         "generate_recommendations",
         lambda *args, **kwargs: {
             "candidates_considered": 1,
-                "recommendations": [
-                    {"tmdb_id": 348, "title": "Alien", "expected_rating": 4.2}
-                ],
+            "recommendations": [{"tmdb_id": 348, "title": "Alien", "expected_rating": 4.2}],
         },
     )
     monkeypatch.setattr(main_module, "_tmdb_search_ids", lambda *_args: [348])
@@ -108,9 +106,7 @@ def test_ui_disables_cache_and_movie_search_returns_scores(
     assert search.json()["results"][0]["expected_rating"] == 4.2
 
 
-def test_refresh_persists_profile_ranking(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_refresh_persists_profile_ranking(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _report(tmp_path)
     main_module = import_module("app.main")
     original = settings.ml_artifacts_dir

@@ -172,8 +172,7 @@ def test_split_section_returns_one_enthusiast_movie_per_person(monkeypatch) -> N
         if candidate_tmdb_ids is None:
             return {
                 "recommendations": [
-                    _movie(tmdb_id, scores[user][tmdb_id], user)
-                    for tmdb_id in (10, 20, 30)
+                    _movie(tmdb_id, scores[user][tmdb_id], user) for tmdb_id in (10, 20, 30)
                 ]
             }
         return {
@@ -183,9 +182,7 @@ def test_split_section_returns_one_enthusiast_movie_per_person(monkeypatch) -> N
         }
 
     monkeypatch.setattr(service, "generate_recommendations", fake_generate)
-    report = service.generate_group_recommendations(
-        Path("three-person-artifact"), users, limit=3
-    )
+    report = service.generate_group_recommendations(Path("three-person-artifact"), users, limit=3)
 
     assert [movie["featured_enthusiast"] for movie in report["most_divisive"]] == users
     assert [movie["tmdb_id"] for movie in report["most_divisive"]] == [10, 20, 30]
@@ -209,9 +206,7 @@ def test_split_section_falls_back_to_second_place_instead_of_dropping_person(
         }
 
     monkeypatch.setattr(service, "generate_recommendations", fake_generate)
-    report = service.generate_group_recommendations(
-        Path("fallback-artifact"), users, limit=3
-    )
+    report = service.generate_group_recommendations(Path("fallback-artifact"), users, limit=3)
     by_user = {movie["featured_enthusiast"]: movie for movie in report["most_divisive"]}
 
     assert set(by_user) == set(users)

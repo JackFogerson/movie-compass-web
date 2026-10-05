@@ -84,9 +84,7 @@ def build_profile_archive(
         media_type = "tv" if tmdb_id is not None and is_tv_catalog_id(tmdb_id) else "movie"
         external_tmdb_id = abs(tmdb_id) if tmdb_id is not None else None
         watched_date = mapping.watched_date.isoformat() if mapping.watched_date else ""
-        letterboxd_uri = (
-            mapping.source_key if str(mapping.source_key).startswith("http") else ""
-        )
+        letterboxd_uri = mapping.source_key if str(mapping.source_key).startswith("http") else ""
         common = {
             "Date": watched_date,
             "Name": mapping.title,
@@ -216,9 +214,7 @@ def restore_profile_archive(
         if not isinstance(external_tmdb_id, int) or external_tmdb_id <= 0:
             continue
         media_type = "tv" if item.get("media_type") == "tv" else "movie"
-        tmdb_id = (
-            tv_catalog_id(external_tmdb_id) if media_type == "tv" else external_tmdb_id
-        )
+        tmdb_id = tv_catalog_id(external_tmdb_id) if media_type == "tv" else external_tmdb_id
         year = item.get("year") if isinstance(item.get("year"), int) else None
         mapping = mapping_index.get((normalize_title(str(item.get("title") or "")), year))
         if mapping is None:

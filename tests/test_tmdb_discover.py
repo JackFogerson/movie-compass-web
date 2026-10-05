@@ -43,9 +43,7 @@ def test_direct_movie_search_can_include_adult_titles() -> None:
 
     client = TmdbClient("test-key", transport=httpx.MockTransport(handler))
     try:
-        results = client.search_movie(
-            "Through the Looking Glass", 1976, include_adult=True
-        )
+        results = client.search_movie("Through the Looking Glass", 1976, include_adult=True)
     finally:
         client.close()
 

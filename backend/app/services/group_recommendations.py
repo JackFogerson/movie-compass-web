@@ -164,15 +164,11 @@ def _group_caution_explanations(individual: list[dict]) -> list[str]:
         name = item.get("display_name", item["user"])
         if matches:
             explanations.append(
-                f"For {name}, "
-                + " and ".join(_caution_clause(match) for match in matches)
-                + "."
+                f"For {name}, " + " and ".join(_caution_clause(match) for match in matches) + "."
             )
         elif item.get("cautions"):
             caution = str(item["cautions"][0]).removeprefix("One possible concern: ")
-            caution = caution.replace("you have", f"{name} has").replace(
-                "for you", f"for {name}"
-            )
+            caution = caution.replace("you have", f"{name} has").replace("for you", f"for {name}")
             explanations.append(f"For {name}, {caution}")
     if not explanations:
         explanations.append(
@@ -292,8 +288,7 @@ def _per_person_divisive_rows(rows: list[dict], users: list[str]) -> list[dict]:
         candidates: list[tuple[int, float, dict]] = []
         for row in rows:
             scores = {
-                item["user"]: float(item["expected_rating"])
-                for item in row["individual_scores"]
+                item["user"]: float(item["expected_rating"]) for item in row["individual_scores"]
             }
             other_scores = [score for candidate, score in scores.items() if candidate != user]
             if not other_scores:
@@ -326,9 +321,7 @@ def _per_person_divisive_rows(rows: list[dict], users: list[str]) -> list[dict]:
         )
         featured["featured_enthusiasm_rank"] = best_rank
         featured["featured_enthusiasm_label"] = (
-            "most enthusiastic"
-            if best_rank == 1
-            else f"{_ordinal(best_rank)} most enthusiastic"
+            "most enthusiastic" if best_rank == 1 else f"{_ordinal(best_rank)} most enthusiastic"
         )
         selected.append(featured)
     return selected
@@ -413,8 +406,7 @@ def generate_group_recommendations(
         initial_reports = dict(executor.map(initial_score, normalized))
 
     catalog_screened_by_profile = {
-        user: int(report.get("candidate_universe", 0))
-        for user, report in initial_reports.items()
+        user: int(report.get("candidate_universe", 0)) for user, report in initial_reports.items()
     }
     catalog_candidates_screened = max(catalog_screened_by_profile.values(), default=0)
 
@@ -568,9 +560,7 @@ def generate_group_recommendations(
         low["rank"] = len(lowest) + 1
         low["group_reason"] = _lowest_group_reason(low["individual_scores"])
         low["why_you_may_like_it"] = _group_like_explanations(low["individual_scores"])
-        low["why_you_may_not_like_it"] = _group_caution_explanations(
-            low["individual_scores"]
-        )
+        low["why_you_may_not_like_it"] = _group_caution_explanations(low["individual_scores"])
         lowest.append(low)
         if len(lowest) >= bottom_limit:
             break

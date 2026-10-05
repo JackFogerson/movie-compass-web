@@ -35,9 +35,7 @@ def create_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def create_session_token(
-    secret: str, account_id: int, email: str, session_version: int = 1
-) -> str:
+def create_session_token(secret: str, account_id: int, email: str, session_version: int = 1) -> str:
     serializer = URLSafeTimedSerializer(secret, salt="movie-compass-session")
     return serializer.dumps(
         {

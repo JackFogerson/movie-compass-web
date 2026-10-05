@@ -122,9 +122,7 @@ def _rating_surprises(
         key=lambda item: (item["difference"], item["actual_rating"]),
         reverse=True,
     )[:3]
-    lowest = sorted(
-        comparisons, key=lambda item: (item["difference"], item["actual_rating"])
-    )[:3]
+    lowest = sorted(comparisons, key=lambda item: (item["difference"], item["actual_rating"]))[:3]
     return {
         "highest_actual_minus_expected": highest[0],
         "lowest_actual_minus_expected": lowest[0],
@@ -136,8 +134,8 @@ def _rating_surprises(
 def profile_accuracy(artifact_dir: Path, user: str) -> dict:
     """Evaluate a profile on ratings hidden from its personal fit layer."""
     artifact_key = str(artifact_dir.resolve())
-    catalog, _movie_ids, _manifest, collaborative, popularity = (
-        _load_shared_recommender_assets(artifact_key)
+    catalog, _movie_ids, _manifest, collaborative, popularity = _load_shared_recommender_assets(
+        artifact_key
     )
     with SessionLocal() as session:
         personal = linked_personal_ratings(session, user, catalog)
@@ -200,9 +198,7 @@ def profile_accuracy(artifact_dir: Path, user: str) -> dict:
             }
             for row in catalog.itertuples(index=False)
         }
-        surprises = _rating_surprises(
-            errors, identifier="movie_id", titles=title_lookup
-        )
+        surprises = _rating_surprises(errors, identifier="movie_id", titles=title_lookup)
     else:
         raw_evaluations, linked_count = _tmdb_heldout_evaluations(
             tmdb_personal, weight_policy["cold_start_weights"]
@@ -230,9 +226,7 @@ def profile_accuracy(artifact_dir: Path, user: str) -> dict:
             }
             for tmdb_id, item in details_by_id.items()
         }
-        surprises = _rating_surprises(
-            errors, identifier="tmdb_id", titles=title_lookup
-        )
+        surprises = _rating_surprises(errors, identifier="tmdb_id", titles=title_lookup)
     signed_errors = [float(row["hybrid"]) - float(row["actual"]) for row in errors]
     bias = mean(signed_errors)
     bands: dict[str, list[tuple[float, float]]] = {}

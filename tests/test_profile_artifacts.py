@@ -69,9 +69,7 @@ def test_profile_artifacts_are_isolated_and_deletable() -> None:
     first_id = _profile("artifact-owner-one")
     _profile("artifact-owner-two")
     save_profile_artifact("artifact-owner-one", "review_policy", "current", {"enabled": True})
-    save_profile_artifact(
-        "artifact-owner-two", "review_policy", "current", {"enabled": False}
-    )
+    save_profile_artifact("artifact-owner-two", "review_policy", "current", {"enabled": False})
 
     assert load_profile_artifact("artifact-owner-one", "review_policy", "current") == {
         "enabled": True
@@ -85,6 +83,7 @@ def test_profile_artifacts_are_isolated_and_deletable() -> None:
     assert has_profile_artifact("artifact-owner-one", "review_policy", "current") is False
     assert has_profile_artifact("artifact-owner-two", "review_policy", "current") is True
     with SessionLocal() as session:
-        assert session.scalar(
-            select(ProfileArtifact.id).where(ProfileArtifact.user_id == first_id)
-        ) is None
+        assert (
+            session.scalar(select(ProfileArtifact.id).where(ProfileArtifact.user_id == first_id))
+            is None
+        )

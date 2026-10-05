@@ -60,7 +60,8 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 Copy `movie-compass.env.example` to `/etc/movie-compass.env`. Fill in the secrets directly on the
 VM, including the tunnel token copied from Cloudflare. Never put them in Git or chat. Install both
-systemd units:
+systemd units. The application unit initializes or upgrades the persistent SQLite schema before
+each start; the PostgreSQL-only Alembic chain is intentionally not run on this deployment:
 
 ```bash
 sudo cp /opt/movie-compass/deploy/google-cloud/movie-compass.service /etc/systemd/system/

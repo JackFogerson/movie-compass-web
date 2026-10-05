@@ -48,8 +48,10 @@ def select_personalized_weights(
     tmdb_details = tmdb_details or {}
     tmdb_ratings = tmdb_ratings or {}
     tmdb_ids = sorted(set(tmdb_details).intersection(tmdb_ratings))
-    fingerprint = _fingerprint(ratings) + ":" + _fingerprint(
-        {tmdb_id: tmdb_ratings[tmdb_id] for tmdb_id in tmdb_ids}
+    fingerprint = (
+        _fingerprint(ratings)
+        + ":"
+        + _fingerprint({tmdb_id: tmdb_ratings[tmdb_id] for tmdb_id in tmdb_ids})
     )
     with _LOCK:
         if output_path.is_file():

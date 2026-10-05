@@ -34,6 +34,15 @@
         </form>
       </div>
       <p id="auth-status" class="status-message" aria-live="polite"></p>
+      <form id="verify-email-form" class="auth-form recovery-form" hidden>
+        <p>Enter the six-digit code sent to your email to finish creating the account.</p>
+        <label>Email<input id="verification-email" type="email" autocomplete="email" required /></label>
+        <label>Six-digit code<input id="verification-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required /></label>
+        <div class="button-row">
+          <button type="submit">Verify and sign in</button>
+          <button id="resend-verification-code" class="secondary-button" type="button">Send another code</button>
+        </div>
+      </form>
       <details class="auth-recovery">
         <summary>Forgot your password?</summary>
         <form id="request-reset-code-form" class="auth-form recovery-form">
