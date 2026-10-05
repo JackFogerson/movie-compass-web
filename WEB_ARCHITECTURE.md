@@ -56,7 +56,8 @@ include a restrictive content-security policy and related security headers.
 
 - Google Cloud Free Tier `e2-micro` VM in an eligible US region, which has no scheduled idle sleep.
 - One Uvicorn worker under systemd and SQLite/WAL on standard persistent disk.
-- Caddy for automatic HTTPS and reverse proxying.
+- Free external IPv6 plus an outbound-only Cloudflare Tunnel for public HTTPS, avoiding Google's
+  paid always-attached external IPv4 address.
 - Daily consistent SQLite backups copied off the VM to a separate storage destination.
 
 The repository retains Oracle and Render configurations as alternatives. Oracle's abandonment

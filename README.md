@@ -32,7 +32,7 @@ so the website link does not need to change for every release.
 - PostgreSQL/Alembic migration for accounts and ownership.
 - Responsive login/create-account interface integrated with the existing application.
 - A lightweight deployment for Google Cloud's always-running `e2-micro` Free Tier VM, using one
-  application worker, persistent SQLite/WAL, systemd, and Caddy. Oracle and Render configurations
+  application worker, persistent SQLite/WAL, systemd, external IPv6, and Cloudflare Tunnel. Oracle and Render configurations
   remain alternatives, but are not the recommended family-beta path.
 
 Before deploying, set `WEB_SESSION_SECRET` to a random value of at least 32 characters, set `WEB_COOKIE_SECURE=true`, and keep `TMDB_API_KEY` and `RESEND_API_KEY` in the host's protected environment file or secret manager. Set `EMAIL_FROM` to a sender on a domain verified with the email provider. Production normally requires PostgreSQL; the single-VM family beta may explicitly enable an absolute persistent SQLite database with `ALLOW_SQLITE_PRODUCTION=true`. Website users never enter their own service keys. Never commit those values. The public `/health` endpoint reports only `tmdb: configured` or `tmdb: missing`, never a credential.

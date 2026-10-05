@@ -3,30 +3,41 @@
 This is the primary family-and-friends beta target. Google Cloud's ongoing Free Tier currently
 includes enough monthly Compute Engine time for one non-preemptible `e2-micro` VM, 30 GB-months
 of standard persistent disk, and 1 GB of North American outbound transfer in `us-west1`,
-`us-central1`, or `us-east1`. The VM does not have an idle sleep policy. A billing account is
-required, and exceeding a free monthly allowance can create charges, so enable budgets and alerts.
+`us-central1`, or `us-east1`. The VM has no idle sleep policy. A billing account is required and
+usage beyond a monthly allowance can create charges.
 
-The `e2-micro` has only 1 GB RAM. This deployment therefore runs one Uvicorn worker directly under
-systemd and uses durable SQLite in WAL mode rather than a PostgreSQL container. That is suitable
-for a small, low-concurrency family beta and keeps all account/profile data on persistent disk.
-PostgreSQL remains the upgrade path for a larger public audience.
+An always-attached external IPv4 address is **not** free. This design instead gives the VM a free
+external IPv6 address and publishes the site through a Cloudflare Tunnel. The tunnel is outbound
+only, requires no public IPv4 or inbound web ports, and terminates public HTTPS at Cloudflare.
+
+The `e2-micro` has only 1 GB RAM. The deployment runs one Uvicorn worker under systemd and uses
+durable SQLite in WAL mode instead of a PostgreSQL container. This is suitable for a small,
+low-concurrency family beta. PostgreSQL remains the upgrade path for a larger public audience.
 
 ## Owner console steps
 
 1. Create a Google Cloud billing account and project. Upgrade the trial billing account to a paid
-   billing account while keeping all resources within Free Tier limits; otherwise trial resources
-   stop when the trial ends.
-2. Create one Ubuntu 24.04 `e2-micro` VM in `us-west1`, `us-central1`, or `us-east1`. Use a 30 GB
-   **standard persistent disk**, not balanced or SSD disk. Reserve its external IPv4 address.
-3. Create billing budgets/alerts. A budget alerts but does not cap spending, so also avoid any
-   resource not listed in the Free Tier allowance.
-4. Allow inbound TCP 80 and 443. Restrict SSH to the owner's IP when practical.
-5. Point the website domain's `A` record to the reserved IP.
+   billing account while keeping resources inside Free Tier limits; otherwise trial resources stop
+   when the trial ends.
+2. Create a custom-mode VPC with a dual-stack or IPv6-only subnet whose IPv6 access type is
+   **External**. Place it in `us-west1`, `us-central1`, or `us-east1`.
+3. Create one Ubuntu 24.04 `e2-micro` VM on that subnet. Use a 30 GB **standard persistent disk**,
+   select a non-Spot/non-preemptible provisioning model, enable external IPv6, and do not keep an
+   external IPv4 attached after setup.
+4. Create billing budgets/alerts. Ordinary Compute Engine budgets alert but do not stop usage.
+5. Put the domain on Cloudflare's free DNS plan. Create a Cloudflare Tunnel and a public hostname
+   such as `movies.example.com` whose service is `http://127.0.0.1:10000`.
+6. Keep inbound HTTP/HTTPS closed. Use Google IAP for administrator SSH access.
+
+GitHub does not currently publish an IPv6 address. During the initial installation, an ephemeral
+external IPv4 may be attached to the VM and removed immediately after the repository and packages
+are installed. Google currently includes only one external-IPv4 hour per account per month; do not
+leave it attached. The running application, TMDB, Resend, PyPI, and Cloudflare Tunnel use IPv6.
 
 ## VM installation
 
-Install Python 3.12, Git, and Caddy, then clone the web repository to `/opt/movie-compass`. Create a
-dedicated `moviecompass` system user, a virtual environment, and install the project:
+Install Python 3.12, Git, and `cloudflared`, then clone the web repository to
+`/opt/movie-compass`. Create a dedicated service user and install the project:
 
 ```bash
 sudo useradd --system --home /opt/movie-compass --shell /usr/sbin/nologin moviecompass
@@ -47,24 +58,25 @@ sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
-Copy `movie-compass.env.example` to `/etc/movie-compass.env`, make it readable only by root and the
-service group, and fill in the real secrets on the VM. Never put them in Git or chat. Copy the
-systemd service and enable it:
+Copy `movie-compass.env.example` to `/etc/movie-compass.env`. Fill in the secrets directly on the
+VM, including the tunnel token copied from Cloudflare. Never put them in Git or chat. Install both
+systemd units:
 
 ```bash
 sudo cp /opt/movie-compass/deploy/google-cloud/movie-compass.service /etc/systemd/system/
+sudo cp /opt/movie-compass/deploy/google-cloud/cloudflared.service /etc/systemd/system/
 sudo chown root:moviecompass /etc/movie-compass.env
 sudo chmod 640 /etc/movie-compass.env
 sudo systemctl daemon-reload
-sudo systemctl enable --now movie-compass
+sudo systemctl enable --now movie-compass cloudflared
 ```
 
-Replace the example domain in `Caddyfile.example`, install it as `/etc/caddy/Caddyfile`, and restart
-Caddy. Caddy obtains and renews HTTPS certificates automatically after DNS and ports are correct.
+Confirm the public hostname works, then detach the temporary external IPv4 in Google Cloud. Do not
+delete the VM or its standard persistent disk.
 
 ## Backups
 
-Create a consistent online backup (do not copy a live WAL database directly):
+Create a consistent online backup instead of copying a live WAL database directly:
 
 ```bash
 sudo -u moviecompass /opt/movie-compass/.venv/bin/python \
@@ -72,13 +84,13 @@ sudo -u moviecompass /opt/movie-compass/.venv/bin/python \
   /var/lib/movie-compass/movie-compass.sqlite3 /var/backups/movie-compass
 ```
 
-Schedule that daily with a systemd timer or cron. Keeping a second encrypted copy outside the VM
-is required before treating real profiles as durable. Test a restore before public release.
+Schedule that daily. Keep a second encrypted copy outside the VM before treating real profiles as
+durable, and test a restore before release.
 
 ## Verification
 
-- `/health` returns a process response.
+- `/health` returns a process response through the Cloudflare hostname.
 - `/ready` confirms the database, bundled catalog, and TMDB configuration.
 - Registration, login, email reset, profile import/export, search, recommendations, and shared
-  movie night all pass on the public HTTPS address.
-- Reboot the VM and confirm systemd restarts both the application and Caddy automatically.
+  movie night pass on public HTTPS.
+- Reboot the VM and confirm systemd restarts the app and tunnel automatically.
