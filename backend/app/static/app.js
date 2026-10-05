@@ -78,6 +78,7 @@ const closeStatCategoryButton = document.querySelector("#close-stat-category");
 const showProfileAccuracyButton = document.querySelector("#show-profile-accuracy");
 const exportProfileButton = document.querySelector("#export-profile");
 const profileAccuracy = document.querySelector("#profile-accuracy");
+const showAdultPostersInput = document.querySelector("#show-adult-posters");
 const manualMovieQueryInput = document.querySelector("#manual-movie-query");
 const manualMovieYearInput = document.querySelector("#manual-movie-year");
 const findManualMovieButton = document.querySelector("#find-manual-movie");
@@ -142,6 +143,37 @@ let catalogStatus = null;
 let savedProfiles = [];
 let sharedGroupProfiles = [];
 let selectedManualMovie = null;
+const adultPosterPreferenceKey = "movie-compass-show-adult-posters";
+
+function applyAdultPosterPreference(show) {
+  showAdultPostersInput.checked = show;
+  document.body.classList.toggle("show-adult-posters", show);
+  localStorage.setItem(adultPosterPreferenceKey, show ? "true" : "false");
+}
+
+function manualPosterMarkup(movie) {
+  if (!movie.poster_url) return '<span class="manual-movie-poster-placeholder"></span>';
+  const image = `<img src="${escapeHtml(movie.poster_url)}" alt="" loading="lazy" />`;
+  if (!movie.adult) return image;
+  return `<span class="manual-sensitive-poster" role="button" tabindex="0" aria-label="Adult poster hidden. Click to reveal.">${image}<em>Click to reveal</em></span>`;
+}
+
+function enableSensitivePosterReveal(option) {
+  const poster = option.querySelector(".manual-sensitive-poster");
+  if (!poster) return;
+  const reveal = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    poster.classList.add("revealed");
+    poster.removeAttribute("role");
+    poster.removeAttribute("tabindex");
+    poster.setAttribute("aria-label", "Adult poster revealed");
+  };
+  poster.addEventListener("click", reveal);
+  poster.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") reveal(event);
+  });
+}
 
 async function submitAccountForm(path, payload) {
   authStatus.textContent = "Working…";
@@ -1088,7 +1120,9 @@ async function findManualMovie() {
       option.type = "button";
       option.className = "manual-movie-option";
       const mediaLabel = movie.media_type === "tv" ? "Miniseries / TV" : "Movie";
-      option.innerHTML = `${movie.poster_url ? `<img src="${escapeHtml(movie.poster_url)}" alt="" loading="lazy" />` : '<span class="manual-movie-poster-placeholder"></span>'}<span><b>${escapeHtml(movie.title)}</b><small>${escapeHtml(movie.year ?? "Year unavailable")} · ${mediaLabel}</small></span>`;
+      const adultLabel = movie.adult ? " · Adult title" : "";
+      option.innerHTML = `${manualPosterMarkup(movie)}<span><b>${escapeHtml(movie.title)}</b><small>${escapeHtml(movie.year ?? "Year unavailable")} · ${mediaLabel}${adultLabel}</small></span>`;
+      enableSensitivePosterReveal(option);
       option.addEventListener("click", () => chooseManualMovie(movie));
       manualMovieResults.append(option);
     });
@@ -1468,6 +1502,7 @@ showProfileAccuracyButton.addEventListener("click", showProfileAccuracy);
 exportProfileButton.addEventListener("click", exportProfile);
 findManualMovieButton.addEventListener("click", findManualMovie);
 saveManualRatingButton.addEventListener("click", saveManualRating);
+showAdultPostersInput.addEventListener("change", () => applyAdultPosterPreference(showAdultPostersInput.checked));
 updateProfileButton.addEventListener("click", updateCurrentProfile);
 deleteProfileButton.addEventListener("click", deleteProfile);
 searchMovieButton.addEventListener("click", searchMovieScores);
@@ -1567,6 +1602,7 @@ friendRequestForm.addEventListener("submit", sendFriendRequest);
 friendsLists.addEventListener("click", changeFriendship);
 friendsLists.addEventListener("click", changeProfileShare);
 authDialog.addEventListener("cancel", (event) => event.preventDefault());
+applyAdultPosterPreference(localStorage.getItem(adultPosterPreferenceKey) === "true");
 loadTmdbStatus();
 bootstrapApplication();
 switchView(
