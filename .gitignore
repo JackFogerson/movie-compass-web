@@ -11,6 +11,8 @@ data/raw/
 data/processed/
 data/logs/
 data/*.sqlite3
+data/*.sqlite3-shm
+data/*.sqlite3-wal
 ml/artifacts/
 *.egg-info/
 
