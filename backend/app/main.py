@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
 from statistics import median
@@ -64,8 +65,10 @@ from app.services.profile_accuracy import profile_accuracy as evaluate_profile_a
 from app.services.profile_artifacts import delete_profile_artifacts, has_profile_artifact
 from app.services.profile_export import build_profile_archive, restore_profile_archive
 from app.services.profile_stats import (
+    build_metadata_filter_index,
     build_taste_breakdown,
     category_label_matches,
+    metadata_filter_options,
     metadata_match_stat_target,
     movie_category_labels,
 )
@@ -130,6 +133,8 @@ class GroupRecommendationRequest(BaseModel):
     runtime_max: int | None = Field(default=None, ge=1, le=600)
     popularity: str = "all"
     genre: str | None = Field(default=None, max_length=60)
+    metadata_category: str | None = Field(default=None, max_length=30)
+    metadata_value: str | None = Field(default=None, max_length=200)
     media_type: str = Field(default="movie", pattern=r"^(all|movie|tv)$")
     country: str = Field(default="US", pattern=r"^[A-Z]{2}$")
     include_watched: bool = False
@@ -229,6 +234,25 @@ def _load_profile_detail_cache() -> dict[str, dict]:
                 {key: value for key, value in details.items() if value is not None}
             )
     return merged
+
+
+def _metadata_cache_version() -> tuple[tuple[str, int, int], ...]:
+    version = []
+    for cache_name in ("tmdb-rich-details.json", "display-metadata.json"):
+        path = settings.processed_data_dir / cache_name
+        try:
+            stat = path.stat()
+            version.append((cache_name, stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            version.append((cache_name, 0, 0))
+    return tuple(version)
+
+
+@lru_cache(maxsize=4)
+def _catalog_metadata_option_index(
+    _version: tuple[tuple[str, int, int], ...],
+) -> dict[str, dict[str, int]]:
+    return build_metadata_filter_index(_load_profile_detail_cache())
 
 
 def _local_movie_search_ids(query: str, year: int | None, limit: int) -> list[int]:
@@ -1330,6 +1354,25 @@ def catalog_status() -> dict:
     }
 
 
+@app.get("/catalog/metadata-options")
+def catalog_metadata_options(
+    category: str = Query(max_length=30),
+    q: str = Query(default="", max_length=100),
+    limit: int = Query(default=12, ge=1, le=30),
+) -> dict:
+    """Return exact catalog traits for dropdowns and type-ahead filters."""
+    try:
+        return metadata_filter_options(
+            {},
+            category,
+            query=q,
+            limit=limit,
+            option_index=_catalog_metadata_option_index(_metadata_cache_version()),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @app.get("/profiles")
 def profiles(request: Request) -> dict:
     """List only the profiles owned by the signed-in account."""
@@ -2353,6 +2396,8 @@ def group_recommendations(http_request: Request, request: GroupRecommendationReq
             runtime_max=request.runtime_max,
             popularity=request.popularity,
             genre=request.genre,
+            metadata_category=request.metadata_category,
+            metadata_value=request.metadata_value,
             media_type=request.media_type,
             include_watched=request.include_watched,
             exclude_any_watched=request.exclude_any_watched,
@@ -2428,12 +2473,14 @@ def recommendations(
     runtime_min: int | None = Query(default=None, ge=1, le=600),
     runtime_max: int | None = Query(default=None, ge=1, le=600),
     genre: str | None = Query(default=None, max_length=60),
+    metadata_category: str | None = Query(default=None, max_length=30),
+    metadata_value: str | None = Query(default=None, max_length=200),
     media_type: str = Query(default="all", pattern=r"^(all|movie|tv)$"),
     country: str = Query(default="US", pattern=r"^[A-Z]{2}$"),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> dict:
     try:
-        if media_type != "all":
+        if media_type != "all" or metadata_category or metadata_value:
             report = generate_recommendations(
                 _latest_artifact(settings.ml_artifacts_dir),
                 user=user,
@@ -2444,6 +2491,8 @@ def recommendations(
                 runtime_min=runtime_min,
                 runtime_max=runtime_max,
                 genre=genre,
+                metadata_category=metadata_category,
+                metadata_value=metadata_value,
                 media_type=media_type,
                 live_tmdb=media_type == "tv",
                 persist=False,
@@ -2779,6 +2828,8 @@ def refresh_recommendations(
     limit: int = Query(default=20, ge=1, le=100),
     popularity: str = Query(default="all"),
     genre: str | None = Query(default=None, max_length=60),
+    metadata_category: str | None = Query(default=None, max_length=30),
+    metadata_value: str | None = Query(default=None, max_length=200),
     media_type: str = Query(default="all", pattern=r"^(all|movie|tv)$"),
     country: str = Query(default="US", pattern=r"^[A-Z]{2}$"),
 ) -> dict:
@@ -2801,6 +2852,8 @@ def refresh_recommendations(
             runtime_max=runtime_max,
             popularity_tier=popularity,
             genre=genre,
+            metadata_category=metadata_category,
+            metadata_value=metadata_value,
             media_type=media_type,
             live_tmdb=False,
             persist=True,
