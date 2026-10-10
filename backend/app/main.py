@@ -103,6 +103,7 @@ from ingestion.tmdb.client import (
     normalize_tv_details,
     normalize_tv_search_result,
     rank_title_search_results,
+    tv_catalog_id,
 )
 from ingestion.tmdb.daily_export import load_catalog_summary
 from ingestion.tmdb.details_cache import load_or_fetch_details
@@ -401,6 +402,57 @@ def _tmdb_search_ids(query: str, year: int | None, limit: int) -> list[int]:
                 "offline catalog. Please retry the lookup when the connection is available."
             ),
         ) from error
+    finally:
+        client.close()
+
+
+def _person_filter_candidate_ids(
+    category: str | None,
+    value: str | None,
+    media_type: str,
+) -> list[int]:
+    """Expand actor/director filters beyond titles already present in the local cache."""
+    if category not in {"actors", "directors"} or not value or not settings.tmdb_api_key:
+        return []
+    client = TmdbClient(settings.tmdb_api_key)
+    try:
+        people = client.search_person(value)
+        wanted = normalize_title(value)
+        exact = [person for person in people if normalize_title(person.get("name") or "") == wanted]
+        candidates = exact or people
+        if not candidates:
+            return []
+        person = max(candidates, key=lambda item: float(item.get("popularity") or 0.0))
+        credits = client.person_combined_credits(int(person["id"]))
+        rows = credits.get("cast", []) if category == "actors" else credits.get("crew", [])
+        if category == "directors":
+            rows = [row for row in rows if row.get("job") == "Director"]
+        rows = [row for row in rows if not row.get("adult")]
+        rows.sort(
+            key=lambda row: (
+                float(row.get("popularity") or 0.0),
+                str(row.get("release_date") or row.get("first_air_date") or ""),
+            ),
+            reverse=True,
+        )
+        ids = []
+        for row in rows:
+            row_type = row.get("media_type") or ("tv" if row.get("name") else "movie")
+            if media_type != "all" and row_type != media_type:
+                continue
+            tmdb_id = (
+                tv_catalog_id(int(row["id"])) if row_type == "tv" else int(row["id"])
+            )
+            if tmdb_id not in ids:
+                ids.append(tmdb_id)
+        available, _ = load_or_fetch_details(
+            client,
+            set(ids[:250]),
+            settings.processed_data_dir / "tmdb-rich-details.json",
+        )
+        return [tmdb_id for tmdb_id in ids if tmdb_id in available]
+    except (RetryError, TmdbError):
+        return []
     finally:
         client.close()
 
@@ -2386,6 +2438,11 @@ def delete_profile(user: str, request: ProfileDeleteRequest) -> dict:
 def group_recommendations(http_request: Request, request: GroupRecommendationRequest) -> dict:
     _require_movie_night_profiles(http_request.state.account_id, request.users)
     try:
+        person_candidate_ids = _person_filter_candidate_ids(
+            request.metadata_category,
+            request.metadata_value,
+            request.media_type,
+        )
         report = generate_group_recommendations(
             _latest_artifact(settings.ml_artifacts_dir),
             request.users,
@@ -2399,6 +2456,11 @@ def group_recommendations(http_request: Request, request: GroupRecommendationReq
             metadata_category=request.metadata_category,
             metadata_value=request.metadata_value,
             media_type=request.media_type,
+            candidate_tmdb_ids=(
+                ",".join(str(value) for value in person_candidate_ids)
+                if person_candidate_ids
+                else None
+            ),
             include_watched=request.include_watched,
             exclude_any_watched=request.exclude_any_watched,
         )
@@ -2480,6 +2542,11 @@ def recommendations(
     limit: int = Query(default=20, ge=1, le=100),
 ) -> dict:
     try:
+        person_candidate_ids = _person_filter_candidate_ids(
+            metadata_category,
+            metadata_value,
+            media_type,
+        )
         if media_type != "all" or metadata_category or metadata_value:
             report = generate_recommendations(
                 _latest_artifact(settings.ml_artifacts_dir),
@@ -2494,6 +2561,11 @@ def recommendations(
                 metadata_category=metadata_category,
                 metadata_value=metadata_value,
                 media_type=media_type,
+                candidate_tmdb_ids=(
+                    ",".join(str(value) for value in person_candidate_ids)
+                    if person_candidate_ids
+                    else None
+                ),
                 live_tmdb=media_type == "tv",
                 persist=False,
                 emit=False,
@@ -2841,6 +2913,11 @@ def refresh_recommendations(
             settings.processed_data_dir / "review-policies" / f"{user}.json",
         )
         clear_group_recommendation_cache()
+        person_candidate_ids = _person_filter_candidate_ids(
+            metadata_category,
+            metadata_value,
+            media_type,
+        )
         report = generate_recommendations(
             _latest_artifact(settings.ml_artifacts_dir),
             user=user,
@@ -2855,8 +2932,13 @@ def refresh_recommendations(
             metadata_category=metadata_category,
             metadata_value=metadata_value,
             media_type=media_type,
+            candidate_tmdb_ids=(
+                ",".join(str(value) for value in person_candidate_ids)
+                if person_candidate_ids
+                else None
+            ),
             live_tmdb=False,
-            persist=True,
+            persist=not (metadata_category or metadata_value),
             emit=False,
         )
         return _with_display_metadata(report, country)

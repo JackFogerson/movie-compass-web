@@ -59,6 +59,7 @@ const metadataCategoryInput = document.querySelector("#metadata-category");
 const metadataValueSelect = document.querySelector("#metadata-value-select");
 const metadataValueSearch = document.querySelector("#metadata-value-search");
 const metadataValueSuggestions = document.querySelector("#metadata-value-suggestions");
+const metadataValueCaption = document.querySelector("#metadata-value-caption");
 const mediaTypeInput = document.querySelector("#media-type");
 const runtimeInput = document.querySelector("#runtime");
 const availabilityInput = document.querySelector("#availability");
@@ -149,6 +150,7 @@ const groupMetadataCategoryInput = document.querySelector("#group-metadata-categ
 const groupMetadataValueSelect = document.querySelector("#group-metadata-value-select");
 const groupMetadataValueSearch = document.querySelector("#group-metadata-value-search");
 const groupMetadataValueSuggestions = document.querySelector("#group-metadata-value-suggestions");
+const groupMetadataValueCaption = document.querySelector("#group-metadata-value-caption");
 const groupMediaTypeInput = document.querySelector("#group-media-type");
 const groupRuntimeInput = document.querySelector("#group-runtime");
 const groupAvailabilityInput = document.querySelector("#group-availability");
@@ -335,7 +337,7 @@ function metadataFilterValue(categoryInput, selectInput, searchInput) {
   return value ? { category: categoryInput.value, value } : null;
 }
 
-function configureMetadataFilter(categoryInput, selectInput, searchInput, suggestions) {
+function configureMetadataFilter(categoryInput, selectInput, searchInput, suggestions, caption) {
   let requestNumber = 0;
   let searchTimer;
 
@@ -343,6 +345,7 @@ function configureMetadataFilter(categoryInput, selectInput, searchInput, sugges
     const category = categoryInput.value;
     const currentRequest = ++requestNumber;
     if (!category) {
+      caption.textContent = 'Choose “Filter by” first';
       selectInput.hidden = false;
       selectInput.disabled = true;
       selectInput.innerHTML = '<option value="">Choose a detail above</option>';
@@ -359,6 +362,7 @@ function configureMetadataFilter(categoryInput, selectInput, searchInput, sugges
       if (!response.ok) throw new Error(result.detail || "Filter options could not be loaded");
       if (currentRequest !== requestNumber || category !== categoryInput.value) return;
       if (result.mode === "select") {
+        caption.textContent = `Choose ${result.label.toLowerCase()}`;
         searchInput.hidden = true;
         searchInput.disabled = true;
         searchInput.value = "";
@@ -368,6 +372,7 @@ function configureMetadataFilter(categoryInput, selectInput, searchInput, sugges
           .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.value)} · ${item.films} film${item.films === 1 ? "" : "s"}</option>`)
           .join("");
       } else {
+        caption.textContent = `Search ${result.label.toLowerCase()}`;
         selectInput.hidden = true;
         selectInput.disabled = true;
         searchInput.hidden = false;
@@ -383,6 +388,7 @@ function configureMetadataFilter(categoryInput, selectInput, searchInput, sugges
       selectInput.disabled = true;
       searchInput.hidden = false;
       searchInput.disabled = false;
+      caption.textContent = `Enter ${categoryInput.options[categoryInput.selectedIndex].text.toLowerCase()}`;
       searchInput.placeholder = "Type an exact value…";
     }
   };
@@ -2114,12 +2120,14 @@ configureAuthentication().then(() => {
     metadataValueSelect,
     metadataValueSearch,
     metadataValueSuggestions,
+    metadataValueCaption,
   );
   configureMetadataFilter(
     groupMetadataCategoryInput,
     groupMetadataValueSelect,
     groupMetadataValueSearch,
     groupMetadataValueSuggestions,
+    groupMetadataValueCaption,
   );
   return bootstrapApplication();
 });
