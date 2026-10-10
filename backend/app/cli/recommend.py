@@ -164,9 +164,7 @@ def main(
     if media_type not in {"all", "movie", "tv"}:
         raise typer.BadParameter("media_type must be one of: all, movie, tv")
     if bool(metadata_category) != bool(metadata_value):
-        raise typer.BadParameter(
-            "metadata_category and metadata_value must be provided together"
-        )
+        raise typer.BadParameter("metadata_category and metadata_value must be provided together")
     if metadata_category and metadata_category not in METADATA_FILTER_CATEGORIES:
         raise typer.BadParameter(f"Unsupported metadata filter: {metadata_category}")
     parsed_metadata_filters: list[dict[str, str]] = []
@@ -186,9 +184,7 @@ def main(
                 raise typer.BadParameter("Invalid metadata filter category or value")
             parsed_metadata_filters.append({"category": category, "value": value})
     if metadata_category and metadata_value:
-        parsed_metadata_filters.append(
-            {"category": metadata_category, "value": metadata_value}
-        )
+        parsed_metadata_filters.append({"category": metadata_category, "value": metadata_value})
     excluded = _excluded_tmdb_ids(
         user,
         include_watchlist=include_watchlist,
@@ -402,9 +398,12 @@ def main(
         eligible_candidates = [
             item
             for item in eligible_candidates
-            if int(item.get("runtime") or 0) > 0
-            and (runtime_min is None or int(item["runtime"]) >= runtime_min)
-            and (runtime_max is None or int(item["runtime"]) <= runtime_max)
+            if (item.get("_tmdb_discovery_prefiltered") is True and not item.get("runtime"))
+            or (
+                int(item.get("runtime") or 0) > 0
+                and (runtime_min is None or int(item["runtime"]) >= runtime_min)
+                and (runtime_max is None or int(item["runtime"]) <= runtime_max)
+            )
         ]
     if genre:
         normalized_genre = genre.casefold().strip()
@@ -514,9 +513,9 @@ def main(
         else []
     )
     top_tmdb_ids = {item.tmdb_id for item in ranked}
-    lowest_ranked = [
-        item for item in lowest_ranked if item.tmdb_id not in top_tmdb_ids
-    ][:bottom_limit]
+    lowest_ranked = [item for item in lowest_ranked if item.tmdb_id not in top_tmdb_ids][
+        :bottom_limit
+    ]
     output = {
         "generated_at": datetime.now(UTC).isoformat(),
         "user": user,
@@ -565,8 +564,7 @@ def main(
         ),
         "recommendations": [item.to_dict() for item in ranked],
         "lowest_recommendations": [
-            {**item.to_dict(), "rank": index + 1}
-            for index, item in enumerate(lowest_ranked)
+            {**item.to_dict(), "rank": index + 1} for index, item in enumerate(lowest_ranked)
         ],
     }
     output_dir = artifact_dir / "recommendations" / user
