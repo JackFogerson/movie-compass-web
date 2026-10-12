@@ -103,6 +103,7 @@ const manualRatingStatus = document.querySelector("#manual-rating-status");
 const updateProfileArchiveInput = document.querySelector("#update-profile-archive");
 const updateProfileButton = document.querySelector("#update-profile");
 const updateProfileStatus = document.querySelector("#update-profile-status");
+const updateProfileSource = document.querySelector("#update-profile-source");
 const deleteProfileConfirmation = document.querySelector("#delete-profile-confirmation");
 const deleteProfileButton = document.querySelector("#delete-profile");
 const profileEditorStatus = document.querySelector("#profile-editor-status");
@@ -971,6 +972,16 @@ async function responseJson(response) {
   }
 }
 
+function letterboxdProfileFromFilename(filename) {
+  const basename = String(filename || "").replaceAll("\\", "/").split("/").pop();
+  const match = basename.match(/^letterboxd-(.+)-\d{4}-\d{2}-\d{2}(?:[-_].*)?\.zip$/i);
+  return match ? match[1].trim().toLowerCase() : null;
+}
+
+function profileMismatchMessage(expected, received) {
+  return `This Movie Compass profile was created from Letterboxd @${expected}, but the selected export appears to belong to @${received}. Updating it could replace this profile with the wrong person's movie history. Are you sure you want to continue?`;
+}
+
 function updateProfileSummary() {
   const profile = savedProfiles.find((item) => item.slug === user);
   if (!profile) {
@@ -988,6 +999,9 @@ function syncProfileEditor() {
   profileEditor.hidden = !profile;
   emptyProfileState.hidden = Boolean(profile);
   profileDisplayNameInput.value = profile?.display_name || "";
+  updateProfileSource.textContent = profile?.letterboxd_profile
+    ? `Linked Letterboxd account: @${profile.letterboxd_profile}`
+    : "The source Letterboxd account will be saved from the next standard Letterboxd export filename.";
   profileIdInput.value = profile?.slug || user;
   deleteProfileConfirmation.value = "";
   deleteProfileButton.disabled = false;
@@ -1863,7 +1877,7 @@ async function searchGroupMovieScores() {
   }
 }
 
-async function importArchive(slug, archive, button, status, idleLabel) {
+async function importArchive(slug, archive, button, status, idleLabel, allowProfileMismatch = false) {
   if (!/^[A-Za-z0-9_-]+$/.test(slug)) {
     status.textContent = "Profile ID may contain only letters, numbers, - and _.";
     return false;
@@ -1875,13 +1889,29 @@ async function importArchive(slug, archive, button, status, idleLabel) {
   button.disabled = true;
   button.textContent = "Importing…";
   status.textContent = "Reading rated films and mapping them to TMDB. This can take a minute.";
-  const form = new FormData();
-  form.set("user", slug);
-  form.set("archive", archive);
   try {
-    const response = await fetch("/profiles/import/start", { method: "POST", body: form });
-    const queued = await responseJson(response);
-    if (!response.ok) throw new Error(queued.detail || "Import failed");
+    let response;
+    let queued;
+    while (true) {
+      const form = new FormData();
+      form.set("user", slug);
+      form.set("archive", archive);
+      form.set("allow_profile_mismatch", String(allowProfileMismatch));
+      response = await fetch("/profiles/import/start", { method: "POST", body: form });
+      queued = await responseJson(response);
+      const detail = queued.detail;
+      if (response.status === 409 && detail?.code === "letterboxd_profile_mismatch" && !allowProfileMismatch) {
+        if (!window.confirm(profileMismatchMessage(detail.expected, detail.received))) {
+          status.textContent = "Update cancelled. The selected export belongs to a different Letterboxd account.";
+          return false;
+        }
+        allowProfileMismatch = true;
+        status.textContent = "Confirmed. Importing the selected account's history…";
+        continue;
+      }
+      if (!response.ok) throw new Error(typeof detail === "string" ? detail : detail?.message || "Import failed");
+      break;
+    }
     let job;
     for (let attempt = 0; attempt < 1800; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -1939,12 +1969,25 @@ async function importProfile() {
 }
 
 async function updateCurrentProfile() {
+  const archive = updateProfileArchiveInput.files[0];
+  const profile = savedProfiles.find((item) => item.slug === user);
+  const expected = profile?.letterboxd_profile;
+  const received = letterboxdProfileFromFilename(archive?.name);
+  let allowProfileMismatch = false;
+  if (expected && received && expected.toLowerCase() !== received.toLowerCase()) {
+    if (!window.confirm(profileMismatchMessage(expected, received))) {
+      updateProfileStatus.textContent = "Update cancelled. Choose the export for the linked Letterboxd account.";
+      return;
+    }
+    allowProfileMismatch = true;
+  }
   const completed = await importArchive(
     user,
-    updateProfileArchiveInput.files[0],
+    archive,
     updateProfileButton,
     updateProfileStatus,
     "Update profile",
+    allowProfileMismatch,
   );
   if (completed) updateProfileArchiveInput.value = "";
 }

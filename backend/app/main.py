@@ -65,6 +65,11 @@ from app.services.local_catalog_mapping import map_pending_from_artifact
 from app.services.profile_accuracy import profile_accuracy as evaluate_profile_accuracy
 from app.services.profile_artifacts import delete_profile_artifacts, has_profile_artifact
 from app.services.profile_export import build_profile_archive, restore_profile_archive
+from app.services.profile_source import (
+    incoming_letterboxd_profile,
+    profile_source_mismatch,
+    stored_letterboxd_profile,
+)
 from app.services.profile_stats import (
     LANGUAGE_NAMES,
     build_metadata_filter_index,
@@ -2022,6 +2027,7 @@ def profiles(request: Request) -> dict:
                     "id": owner.id,
                     "slug": owner.slug,
                     "display_name": owner.display_name,
+                    "letterboxd_profile": stored_letterboxd_profile(session, owner.id),
                     "films": total,
                     "rated": rated,
                     "mapped": mapped,
@@ -3190,6 +3196,7 @@ async def import_profile(
     request: Request,
     user: Annotated[str, Form()],
     archive: Annotated[UploadFile, File()],
+    allow_profile_mismatch: Annotated[bool, Form()] = False,
 ) -> dict:
     """Import a Letterboxd ZIP locally, then map its titles to TMDB."""
     from app.services.recommendation_reports import VALID_USER
@@ -3231,13 +3238,42 @@ async def import_profile(
                         status_code=409,
                         detail="That profile ID is already used by another account",
                     )
-                imported = import_letterboxd_archive(session, target, user)
+                expected_profile = (
+                    stored_letterboxd_profile(session, existing.id)
+                    if existing is not None
+                    else None
+                )
+                incoming_profile = incoming_letterboxd_profile(archive.filename, target)
+                if (
+                    profile_source_mismatch(expected_profile, incoming_profile)
+                    and not allow_profile_mismatch
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "letterboxd_profile_mismatch",
+                            "expected": expected_profile,
+                            "received": incoming_profile,
+                            "message": (
+                                f"This profile is linked to Letterboxd @{expected_profile}, but "
+                                f"the selected export belongs to @{incoming_profile}."
+                            ),
+                        },
+                    )
+                imported = import_letterboxd_archive(
+                    session,
+                    target,
+                    user,
+                    archive_name=archive.filename,
+                    source_profile=incoming_profile,
+                )
                 imported_profile = session.get(User, imported.user_id)
                 if imported_profile is None:
                     raise HTTPException(status_code=500, detail="Imported profile was not saved")
                 if settings.web_auth_required:
                     imported_profile.owner_account_id = request.state.account_id
                 session.commit()
+                saved_source_profile = stored_letterboxd_profile(session, imported.user_id)
                 totals = {"processed": 0, "matched": 0, "ambiguous": 0, "unresolved": 0}
                 mapping_warning = None
                 portable_mapping_restored = restore_profile_archive(
@@ -3324,6 +3360,7 @@ async def import_profile(
         "archive_retained": False,
         "mapping_complete": mapping_warning is None,
         "mapping_warning": mapping_warning,
+        "letterboxd_profile": saved_source_profile,
         "review_signal_policy": review_policy,
     }
 
@@ -3360,7 +3397,14 @@ def _update_import_job(job_id: str, **values) -> None:
         session.commit()
 
 
-def _run_import_job(job_id: str, archive_path: str, user: str, account_id: int) -> None:
+def _run_import_job(
+    job_id: str,
+    archive_path: str,
+    user: str,
+    account_id: int,
+    original_filename: str | None = None,
+    allow_profile_mismatch: bool = False,
+) -> None:
     path = Path(archive_path)
     _update_import_job(
         job_id,
@@ -3369,11 +3413,16 @@ def _run_import_job(job_id: str, archive_path: str, user: str, account_id: int) 
     )
     try:
         with path.open("rb") as handle:
-            upload = UploadFile(file=handle, filename=path.name)
+            upload = UploadFile(file=handle, filename=original_filename or path.name)
             job_request = SimpleNamespace(
                 state=SimpleNamespace(account_id=account_id, rate_limit_checked=True)
             )
-            result = asyncio.run(import_profile(job_request, user, upload))
+            import_call = (
+                import_profile(job_request, user, upload, True)
+                if allow_profile_mismatch
+                else import_profile(job_request, user, upload)
+            )
+            result = asyncio.run(import_call)
         _update_import_job(
             job_id,
             status="succeeded",
@@ -3407,6 +3456,7 @@ async def start_profile_import(
     request: Request,
     user: Annotated[str, Form()],
     archive: Annotated[UploadFile, File()],
+    allow_profile_mismatch: Annotated[bool, Form()] = False,
 ) -> dict:
     """Save an upload briefly and process it after returning a durable job ID."""
     from app.services.recommendation_reports import VALID_USER
@@ -3435,6 +3485,7 @@ async def start_profile_import(
                 detail="That profile ID is already used by another account",
             )
     job_id = str(uuid4())
+    original_filename = archive.filename or "letterboxd.zip"
     jobs_dir = settings.data_dir / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
     target = jobs_dir / f"{job_id}.zip"
@@ -3447,6 +3498,27 @@ async def start_profile_import(
                     raise HTTPException(status_code=413, detail="Export exceeds 100 MB")
                 handle.write(chunk)
         with SessionLocal() as session:
+            existing = session.scalar(select(User).where(User.slug == user))
+            expected_profile = (
+                stored_letterboxd_profile(session, existing.id) if existing is not None else None
+            )
+            incoming_profile = incoming_letterboxd_profile(original_filename, target)
+            if (
+                profile_source_mismatch(expected_profile, incoming_profile)
+                and not allow_profile_mismatch
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "letterboxd_profile_mismatch",
+                        "expected": expected_profile,
+                        "received": incoming_profile,
+                        "message": (
+                            f"This profile is linked to Letterboxd @{expected_profile}, but "
+                            f"the selected export belongs to @{incoming_profile}."
+                        ),
+                    },
+                )
             session.add(
                 WebJob(
                     id=job_id,
@@ -3463,7 +3535,15 @@ async def start_profile_import(
         raise
     finally:
         await archive.close()
-    background_tasks.add_task(_run_import_job, job_id, str(target), user, account_id)
+    background_tasks.add_task(
+        _run_import_job,
+        job_id,
+        str(target),
+        user,
+        account_id,
+        original_filename,
+        allow_profile_mismatch,
+    )
     return {
         "job_id": job_id,
         "status": "queued",

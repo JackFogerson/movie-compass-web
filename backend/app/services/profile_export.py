@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ImportMapping, Movie, User
+from app.services.profile_source import stored_letterboxd_profile
 from app.services.tmdb_mapping import canonical_movie, upsert_interaction
 from ingestion.letterboxd.parser import normalize_title
 from ingestion.tmdb.client import MatchCandidate, is_tv_catalog_id, tv_catalog_id
@@ -116,6 +117,7 @@ def build_profile_archive(
         "version": 2,
         "profile_id": owner.slug,
         "display_name": owner.display_name,
+        "letterboxd_profile": stored_letterboxd_profile(session, owner.id),
         "exported_at": datetime.now(UTC).isoformat(),
         "rated_films": len(rows),
         "movies": manifest_movies,
