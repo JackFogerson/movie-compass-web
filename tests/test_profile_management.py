@@ -235,6 +235,66 @@ def test_profile_update_warns_before_importing_another_letterboxd_account(monkey
     }
 
 
+def test_portable_restore_coalesces_two_rows_for_the_same_tmdb_movie(tmp_path: Path) -> None:
+    session_factory = _session_factory()
+    with session_factory() as session:
+        owner = User(slug="duplicate-safe", display_name="Duplicate Safe")
+        session.add(owner)
+        session.flush()
+        session.add_all(
+            [
+                ImportMapping(
+                    user_id=owner.id,
+                    source="letterboxd",
+                    source_key="https://letterboxd.com/film/first-title/",
+                    title="First Title",
+                    year=2025,
+                    status="pending",
+                    rating=3.0,
+                    watched=True,
+                ),
+                ImportMapping(
+                    user_id=owner.id,
+                    source="letterboxd",
+                    source_key="https://letterboxd.com/film/alternate-title/",
+                    title="Alternate Title",
+                    year=2025,
+                    status="pending",
+                    rating=4.0,
+                    watched=True,
+                ),
+            ]
+        )
+        session.commit()
+
+    archive = tmp_path / "duplicate-title-backup.zip"
+    manifest = {
+        "format": "movie-compass-profile",
+        "version": 2,
+        "display_name": "Duplicate Safe",
+        "movies": [
+            {"title": "First Title", "year": 2025, "tmdb_id": 999, "media_type": "movie"},
+            {
+                "title": "Alternate Title",
+                "year": 2025,
+                "tmdb_id": 999,
+                "media_type": "movie",
+            },
+        ],
+    }
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("movie-compass-profile.json", json.dumps(manifest))
+        bundle.writestr("movie-compass-metadata.json", "{}")
+
+    with session_factory() as session:
+        restored = restore_profile_archive(session, archive, "duplicate-safe")
+        interactions = session.scalars(select(UserMovieInteraction)).all()
+
+    assert restored == 2
+    assert len(interactions) == 1
+    assert float(interactions[0].rating) == 4.0
+
+
 def test_profile_rating_history_is_newest_first(monkeypatch) -> None:
     session_factory = _session_factory()
     with session_factory() as session:
